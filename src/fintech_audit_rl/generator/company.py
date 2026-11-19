@@ -6,7 +6,7 @@ from random import Random
 from pydantic import BaseModel, ConfigDict
 
 from fintech_audit_rl.schemas.private import GenerationMetadata
-from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
+from fintech_audit_rl.schemas.public import FxRow, Invoice, LedgerRow, Manifest, Payment, Policy
 
 
 class CleanCompany(BaseModel):
@@ -17,6 +17,7 @@ class CleanCompany(BaseModel):
     invoices: tuple[Invoice, ...]
     payments: tuple[Payment, ...]
     ledger: tuple[LedgerRow, ...]
+    fx: tuple[FxRow, ...] = ()
 
 
 def _row(
@@ -254,4 +255,60 @@ def seeded_clean_kzt(
         manifest=manifest, policy=policy, invoices=(invoice,), payments=(payment,), ledger=ledger
     )
     metadata = GenerationMetadata(seed=seed, config_version=config_version, spec_version="1.0.0")
+    return company, metadata
+
+
+def clean_usd_company(seed: int) -> tuple[CleanCompany, GenerationMetadata]:
+    """One USD invoice/settlement booked in KZT at 500.25, no realized FX gain."""
+    base, metadata = seeded_clean_kzt(seed)
+    fx = (
+        FxRow(date="2026-11-03", source_currency="USD", target_currency="KZT", rate="500.25"),
+        FxRow(date="2026-11-08", source_currency="USD", target_currency="KZT", rate="500.25"),
+        FxRow(date="2026-11-09", source_currency="USD", target_currency="KZT", rate="501.25"),
+        FxRow(date="2026-11-10", source_currency="USD", target_currency="KZT", rate="500.25"),
+    )
+    invoice = base.invoices[0].model_copy(
+        update={
+            "currency": "USD",
+            "total_minor": 10001,
+            "line_items": [
+                base.invoices[0].line_items[0].model_copy(update={"amount_minor": 10001})
+            ],
+        }
+    )
+    payment = base.payments[0].model_copy(
+        update={
+            "currency": "USD",
+            "amount_minor": 10001,
+            "invoice_refs": [
+                base.payments[0].invoice_refs[0].model_copy(update={"amount_minor": 10001})
+            ],
+        }
+    )
+    ledger = []
+    for row in base.ledger:
+        source_date = "2026-11-03" if row.role == "invoice_recognition" else "2026-11-10"
+        ledger.append(
+            row.model_copy(
+                update={
+                    "debit_minor": 5003000 if row.debit_minor else 0,
+                    "credit_minor": 5003000 if row.credit_minor else 0,
+                    "fx_date": source_date,
+                    "fx_rate": "500.25",
+                    "allocated_source_minor": 10001
+                    if row.allocated_source_minor is not None
+                    else None,
+                }
+            )
+        )
+    manifest = base.manifest.model_copy(update={"fx_count": len(fx)})
+    company = base.model_copy(
+        update={
+            "manifest": manifest,
+            "invoices": (invoice,),
+            "payments": (payment,),
+            "ledger": tuple(ledger),
+            "fx": fx,
+        }
+    )
     return company, metadata

@@ -2,7 +2,15 @@
 
 from typing import Protocol
 
-from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
+from fintech_audit_rl.schemas.public import (
+    FxRow,
+    Invoice,
+    LedgerRow,
+    Manifest,
+    Payment,
+    Policy,
+    fx_evidence_id,
+)
 
 
 class PublicBundle(Protocol):
@@ -11,6 +19,7 @@ class PublicBundle(Protocol):
     invoices: tuple[Invoice, ...]
     payments: tuple[Payment, ...]
     ledger: tuple[LedgerRow, ...]
+    fx: tuple[FxRow, ...]
 
 
 class PublicStore:
@@ -21,7 +30,13 @@ class PublicStore:
             "ledger": tuple(row.model_dump(mode="json") for row in company.ledger),
             "invoices": tuple(doc.model_dump(mode="json") for doc in company.invoices),
             "payments": tuple(doc.model_dump(mode="json") for doc in company.payments),
-            "fx": (),
+            "fx": tuple(
+                {
+                    "id": fx_evidence_id(company.manifest.episode_id, row),
+                    **row.model_dump(mode="json"),
+                }
+                for row in company.fx
+            ),
         }
         self._documents = {
             company.policy.doc_id: company.policy.model_dump(mode="json"),

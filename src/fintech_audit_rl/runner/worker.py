@@ -3,6 +3,10 @@
 import json
 import random
 import sys
+from datetime import datetime
+from decimal import ROUND_HALF_EVEN, Decimal
+
+from fintech_audit_rl.schemas.public import policy_timezone
 
 
 def ask(action: dict) -> dict:
@@ -95,6 +99,9 @@ def main() -> int:
             {"type": "list_records", "table": "invoices", "cursor": None, "limit": 50}
         )["records"]
         invoice_by_id = {doc["invoice_id"]: doc for doc in invoice_docs}
+        fx_records = ask({"type": "list_records", "table": "fx", "cursor": None, "limit": 50})[
+            "records"
+        ]
         for payment in payment_docs:
             for ref in payment["invoice_refs"]:
                 invoice = invoice_by_id[ref["invoice_id"]]
@@ -124,6 +131,58 @@ def main() -> int:
                             "explanation": "Recorded allocation is below the payment instruction.",
                         }
                     )
+        public_policy = initial["observation"]["policy"]
+        for payment in payment_docs:
+            if payment["currency"] == manifest["base_currency"]:
+                continue
+            local_date = (
+                datetime.fromisoformat(payment["timestamp"])
+                .astimezone(policy_timezone(public_policy["timezone"]))
+                .date()
+                .isoformat()
+            )
+            reference = next(
+                row
+                for row in fx_records
+                if row["date"] == local_date
+                and row["source_currency"] == payment["currency"]
+                and row["target_currency"] == manifest["base_currency"]
+            )
+            source_exp = public_policy["currency_exponents"][payment["currency"]]
+            base_exp = public_policy["currency_exponents"][manifest["base_currency"]]
+            expected = int(
+                (
+                    Decimal(payment["amount_minor"])
+                    * Decimal(reference["rate"])
+                    * Decimal(10) ** (base_exp - source_exp)
+                ).quantize(Decimal(1), rounding=ROUND_HALF_EVEN)
+            )
+            receipt = [
+                row
+                for row in records
+                if row["role"] == "payment_receipt" and row["payment_id"] == payment["payment_id"]
+            ]
+            bank = next(row for row in receipt if row["account"] == "bank")
+            wrong = bank["debit_minor"] != expected or any(
+                row["fx_date"] != local_date or row["fx_rate"] != reference["rate"]
+                for row in receipt
+            )
+            if wrong:
+                findings.append(
+                    {
+                        "type": "fx_date_or_rate",
+                        "affected_ids": [row["row_id"] for row in receipt],
+                        "claimed_amount_minor": abs(bank["debit_minor"] - expected),
+                        "currency": manifest["base_currency"],
+                        "evidence_ids": [
+                            payment["doc_id"],
+                            *[row["row_id"] for row in receipt],
+                            policy_id,
+                            reference["id"],
+                        ],
+                        "explanation": "Receipt uses a wrong FX date or rate.",
+                    }
+                )
     ask(
         {
             "type": "submit",

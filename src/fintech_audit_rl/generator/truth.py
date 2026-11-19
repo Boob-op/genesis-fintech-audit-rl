@@ -1,7 +1,9 @@
 """Trusted truth construction from causal mutation events."""
 
+from fintech_audit_rl.domain.money import convert_minor
 from fintech_audit_rl.generator.company import CleanCompany
 from fintech_audit_rl.schemas.private import ProvenanceEvent, TruthIssue
+from fintech_audit_rl.schemas.public import fx_evidence_id
 
 
 def duplicate_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssue:
@@ -66,6 +68,47 @@ def allocation_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssu
                 invoice.doc_id,
                 changed.policy.doc_id,
                 *[row.row_id for row in credits],
+            ]
+        ],
+    )
+
+
+def fx_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssue:
+    if event.type != "fx_date_or_rate" or len(event.public_ids) != 2:
+        raise ValueError("wrong FX event")
+    receipt = [row for row in changed.ledger if row.row_id in event.public_ids]
+    if len(receipt) != 2:
+        raise ValueError("receipt evidence missing")
+    payment = next(doc for doc in changed.payments if doc.payment_id == receipt[0].payment_id)
+    from fintech_audit_rl.domain.time import local_fx_date
+
+    required_date = local_fx_date(payment.timestamp, changed.policy.timezone)
+    reference = next(
+        row
+        for row in changed.fx
+        if row.date == required_date
+        and row.source_currency == payment.currency
+        and row.target_currency == changed.manifest.base_currency
+    )
+    correct = convert_minor(
+        payment.amount_minor,
+        reference.rate,
+        changed.policy.currency_exponents[payment.currency],
+        changed.policy.currency_exponents[changed.manifest.base_currency],
+    )
+    recorded = next(row.debit_minor for row in receipt if row.account == "bank")
+    return TruthIssue(
+        issue_id=event.event_id,
+        type="fx_date_or_rate",
+        affected_ids=event.public_ids,
+        expected_amount_minor=abs(recorded - correct),
+        currency=changed.manifest.base_currency,
+        evidence_sets=[
+            [
+                payment.doc_id,
+                *event.public_ids,
+                changed.policy.doc_id,
+                fx_evidence_id(changed.manifest.episode_id, reference),
             ]
         ],
     )

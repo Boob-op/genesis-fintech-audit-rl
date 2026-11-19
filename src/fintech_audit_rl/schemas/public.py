@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from hashlib import sha256
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -183,6 +184,14 @@ class FxRow(StrictModel):
         if self.source_currency == self.target_currency:
             raise ValueError("same-currency FX row is unnecessary")
         return self
+
+
+def fx_evidence_id(episode_id: str, row: FxRow) -> str:
+    """Opaque stable public index ID; FX CSV retains the organizer's four columns."""
+    digest = sha256(
+        f"{episode_id}:{row.date}:{row.source_currency}:{row.target_currency}".encode()
+    ).hexdigest()
+    return f"id-{digest[:32]}"
 
 
 class Policy(StrictModel):

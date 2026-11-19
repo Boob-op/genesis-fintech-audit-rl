@@ -12,9 +12,10 @@ from fintech_audit_rl.benchmark.transforms import rename_ids, shuffle_ledger
 from fintech_audit_rl.env.core import AuditEnv
 from fintech_audit_rl.errors.allocation import short_allocate
 from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognition
+from fintech_audit_rl.errors.fx import wrong_receipt_fx
 from fintech_audit_rl.evaluation.service import Evaluator, Score
-from fintech_audit_rl.generator.company import seeded_clean_kzt
-from fintech_audit_rl.generator.truth import allocation_truth, duplicate_truth
+from fintech_audit_rl.generator.company import clean_usd_company, seeded_clean_kzt
+from fintech_audit_rl.generator.truth import allocation_truth, duplicate_truth, fx_truth
 from fintech_audit_rl.runner.isolation import isolated_worker_command
 from fintech_audit_rl.storage.public_store import PublicStore
 
@@ -48,6 +49,8 @@ def run_first_episode(
     policy_seed: int = 0,
     isolated: bool = False,
     allocation_actual_minor: int | None = None,
+    fx_case: bool = False,
+    fx_error: bool = False,
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
@@ -58,7 +61,11 @@ def run_first_episode(
     if not 0 <= timeout_seconds <= 60:
         raise ValueError("timeout outside developer contract")
     deadline = time.monotonic() + timeout_seconds
-    clean, _private_generation = seeded_clean_kzt(seed)
+    if fx_case and duplicate:
+        raise ValueError("FX case cannot contain duplicate invoice in v1")
+    if fx_error and not fx_case:
+        raise ValueError("FX mutation requires foreign case")
+    clean, _private_generation = clean_usd_company(seed) if fx_case else seeded_clean_kzt(seed)
     if transform == "rename":
         clean = rename_ids(clean)
     public = clean
@@ -74,6 +81,9 @@ def run_first_episode(
             allocation_actual_minor,
         )
         issues = (*issues, allocation_truth(public, event))
+    if fx_error:
+        public, event = wrong_receipt_fx(public, public.payments[0].payment_id, "2026-11-09")
+        issues = (*issues, fx_truth(public, event))
     if transform == "shuffle":
         public = shuffle_ledger(public, seed)
     store = PublicStore(public)

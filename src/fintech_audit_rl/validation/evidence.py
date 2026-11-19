@@ -1,8 +1,16 @@
 """Reconstruct duplicate-invoice issues from public KZT records only."""
 
 from dataclasses import dataclass
+from decimal import ROUND_HALF_EVEN, Decimal
 
-from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
+from fintech_audit_rl.schemas.public import (
+    Invoice,
+    LedgerRow,
+    Manifest,
+    Payment,
+    Policy,
+    policy_timezone,
+)
 
 
 @dataclass(frozen=True)
@@ -97,4 +105,68 @@ def allocation_issues(
                     evidence_ids=frozenset(evidence),
                 )
             )
+    return issues
+
+
+def receipt_fx_issues(
+    manifest: Manifest,
+    policy: Policy,
+    payments: tuple[Payment, ...],
+    ledger: tuple[LedgerRow, ...],
+    fx_records: tuple[dict, ...],
+) -> list[PublicIssue]:
+    """Independently revalue receipts from public payment, policy and FX records."""
+    issues = []
+    for payment in payments:
+        if payment.currency == manifest.base_currency:
+            continue
+        local_date = (
+            payment.timestamp.astimezone(policy_timezone(policy.timezone)).date().isoformat()
+        )
+        reference = next(
+            (
+                row
+                for row in fx_records
+                if row["date"] == local_date
+                and row["source_currency"] == payment.currency
+                and row["target_currency"] == manifest.base_currency
+            ),
+            None,
+        )
+        if reference is None:
+            raise ValueError("reference FX unavailable")
+        exponent_delta = (
+            policy.currency_exponents[manifest.base_currency]
+            - policy.currency_exponents[payment.currency]
+        )
+        raw = Decimal(payment.amount_minor) * Decimal(reference["rate"])
+        raw *= Decimal(10) ** exponent_delta
+        correct = int(raw.quantize(Decimal(1), rounding=ROUND_HALF_EVEN))
+        receipt = [
+            row
+            for row in ledger
+            if row.role == "payment_receipt" and row.payment_id == payment.payment_id
+        ]
+        if len(receipt) != 2:
+            raise ValueError("receipt pair missing")
+        bank = next((row for row in receipt if row.account == "bank"), None)
+        if bank is None or sum(row.debit_minor for row in receipt) != sum(
+            row.credit_minor for row in receipt
+        ):
+            raise ValueError("receipt journal malformed")
+        wrong_metadata = any(
+            row.fx_date != local_date or row.fx_rate != reference["rate"] for row in receipt
+        )
+        if not wrong_metadata and bank.debit_minor == correct:
+            continue
+        row_ids = frozenset(row.row_id for row in receipt)
+        issues.append(
+            PublicIssue(
+                type="fx_date_or_rate",
+                affected_ids=row_ids,
+                expected_amount_minor=abs(bank.debit_minor - correct),
+                currency=manifest.base_currency,
+                evidence_ids=row_ids | {payment.doc_id, policy.doc_id, reference["id"]},
+            )
+        )
     return issues

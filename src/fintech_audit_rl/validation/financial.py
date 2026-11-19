@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 from collections.abc import Sequence
+from decimal import ROUND_HALF_EVEN, Decimal
 
 from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
 
@@ -150,5 +151,111 @@ def clean_kzt_errors(
             f"{entry_id}: wrong allocated source amount",
         )
     for key in expected_entries.keys() - seen:
+        errors.append(f"missing entry for {key}")
+    return errors
+
+
+def clean_foreign_errors(
+    manifest: Manifest,
+    policy: Policy,
+    invoices: Sequence[Invoice],
+    payments: Sequence[Payment],
+    ledger: Sequence[LedgerRow],
+    fx_records: Sequence[dict],
+) -> list[str]:
+    """Independently value each foreign public event and its two journal legs."""
+    from fintech_audit_rl.schemas.public import policy_timezone
+
+    errors: list[str] = []
+    if manifest.fx_count != len(fx_records) or manifest.ledger_count != len(ledger):
+        errors.append("manifest count differs from public data")
+    rates = {
+        (row["date"], row["source_currency"], row["target_currency"]): Decimal(row["rate"])
+        for row in fx_records
+    }
+    if len(rates) != len(fx_records):
+        errors.append("duplicate FX reference")
+    docs = {}
+    for invoice in invoices:
+        docs[("invoice_recognition", invoice.invoice_id, None)] = (
+            invoice.issued_at,
+            invoice.currency,
+            invoice.total_minor,
+            ("receivables", "revenue"),
+        )
+    for payment in payments:
+        docs[("payment_receipt", payment.payment_id, None)] = (
+            payment.timestamp,
+            payment.currency,
+            payment.amount_minor,
+            ("bank", "unapplied_cash"),
+        )
+        for ref in payment.invoice_refs:
+            docs[("payment_allocation", payment.payment_id, ref.invoice_id)] = (
+                payment.timestamp,
+                payment.currency,
+                ref.amount_minor,
+                ("unapplied_cash", "receivables"),
+            )
+    grouped: dict[str, list[LedgerRow]] = defaultdict(list)
+    for row in ledger:
+        grouped[row.entry_id].append(row)
+    seen = set()
+    for entry_id, rows in grouped.items():
+        if len(rows) != 2:
+            errors.append(f"{entry_id}: incomplete entry")
+            continue
+        first = rows[0]
+        key = (
+            first.role,
+            first.invoice_id if first.role == "invoice_recognition" else first.payment_id,
+            first.invoice_id if first.role == "payment_allocation" else None,
+        )
+        expected = docs.get(key)
+        if expected is None or key in seen:
+            errors.append(f"{entry_id}: unexpected or repeated entry")
+            continue
+        seen.add(key)
+        instant, currency, source_minor, accounts = expected
+        date = instant.astimezone(policy_timezone(policy.timezone)).date().isoformat()
+        rate = rates.get((date, currency, manifest.base_currency))
+        if rate is None:
+            errors.append(f"{entry_id}: missing reference FX")
+            continue
+        exp = (
+            policy.currency_exponents[manifest.base_currency] - policy.currency_exponents[currency]
+        )
+        base_minor = int(
+            (Decimal(source_minor) * rate * Decimal(10) ** exp).quantize(
+                Decimal(1), rounding=ROUND_HALF_EVEN
+            )
+        )
+        debits = [row for row in rows if row.debit_minor > 0]
+        credits = [row for row in rows if row.credit_minor > 0]
+        if len(debits) != 1 or len(credits) != 1:
+            errors.append(f"{entry_id}: unbalanced sides")
+            continue
+        debit, credit = debits[0], credits[0]
+        if (
+            (debit.account, credit.account) != accounts
+            or debit.debit_minor != base_minor
+            or credit.credit_minor != base_minor
+        ):
+            errors.append(f"{entry_id}: incorrect base valuation or accounts")
+        if any(
+            row.currency != manifest.base_currency
+            or row.fx_date != date
+            or row.fx_rate != str(rate)
+            or row.timestamp != instant
+            for row in rows
+        ):
+            errors.append(f"{entry_id}: incorrect FX metadata or event time")
+        expected_source = source_minor if first.role == "payment_allocation" else None
+        if (
+            credit.allocated_source_minor != expected_source
+            or debit.allocated_source_minor is not None
+        ):
+            errors.append(f"{entry_id}: incorrect source allocation")
+    for key in docs.keys() - seen:
         errors.append(f"missing entry for {key}")
     return errors
