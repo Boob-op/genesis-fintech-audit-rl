@@ -138,3 +138,7 @@ Worker поддерживает минимальную сверку дубля �
 ## Б05.2 — FX поступления
 
 `clean_usd_company` создаёт согласованный USD invoice/payment с KZT ledger; публичный FX индекс доступен через `list_records/get_record` без изменения обязательных CSV-колонок. `errors/fx.py` меняет обе стороны receipt; `generator/truth.py` и независимые `validation/{financial,evidence}.py` отдельно пересчитывают correct reference conversion Decimal/ROUND_HALF_EVEN. Worker восстанавливает issue через публичные действия. `tests/test_fx.py`, `test_fx_runner.py` проверяют чистый аналог, неправильную дату/курс, нулевую денежную разницу при неверной дате, сумму/валюту/IDs/evidence и F1. 76 локальных тестов прошли. Вариации иных валют и взаимодействия — последующие задачи.
+
+## Б05.3 — period cutoff
+
+`errors/period.py` переносит обе стороны признания KZT-счёта в соседний период, не меняя дату документа и сумму. `generator/truth.py` и `validation/evidence.py` отдельно дают issue по публичным invoice/ledger/policy. Worker определяет нарушение через публичный интерфейс. `tests/test_period.py`, `test_period_runner.py` проверяют ошибку и чистый счёт ровно на исключённой границе [start,end), сумму/валюту/IDs/evidence и F1. 79 локальных тестов прошли. Комбинации и вариации зон ещё впереди.

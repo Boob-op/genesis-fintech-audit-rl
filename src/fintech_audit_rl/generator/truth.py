@@ -112,3 +112,21 @@ def fx_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssue:
             ]
         ],
     )
+
+
+def period_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssue:
+    if event.type != "period_cutoff" or len(event.public_ids) != 2:
+        raise ValueError("wrong period event")
+    rows = [row for row in changed.ledger if row.row_id in event.public_ids]
+    if len(rows) != 2 or len({row.invoice_id for row in rows}) != 1:
+        raise ValueError("period rows missing")
+    invoice = next(doc for doc in changed.invoices if doc.invoice_id == rows[0].invoice_id)
+    amount = next(row.debit_minor for row in rows if row.account == "receivables")
+    return TruthIssue(
+        issue_id=event.event_id,
+        type="period_cutoff",
+        affected_ids=event.public_ids,
+        expected_amount_minor=amount,
+        currency=changed.manifest.base_currency,
+        evidence_sets=[[invoice.doc_id, *event.public_ids, changed.policy.doc_id]],
+    )

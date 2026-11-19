@@ -170,3 +170,47 @@ def receipt_fx_issues(
             )
         )
     return issues
+
+
+def period_issues(
+    manifest: Manifest,
+    policy: Policy,
+    invoices: tuple[Invoice, ...],
+    ledger: tuple[LedgerRow, ...],
+) -> list[PublicIssue]:
+    """Compare document effective instants to explicit ledger period attribution."""
+    issues = []
+    for invoice in invoices:
+        rows = [
+            row
+            for row in ledger
+            if row.role == "invoice_recognition" and row.invoice_id == invoice.invoice_id
+        ]
+        groups = {row.entry_id for row in rows}
+        if len(groups) != 1 or len(rows) != 2:
+            continue  # duplicate recognition is a separate type
+        expected_inside = policy.period_start <= invoice.issued_at < policy.period_end
+        actual_inside = all(
+            row.reporting_period_start == manifest.period_start
+            and row.reporting_period_end == manifest.period_end
+            for row in rows
+        )
+        if expected_inside == actual_inside:
+            continue
+        if (
+            rows[0].reporting_period_start != rows[1].reporting_period_start
+            or rows[0].reporting_period_end != rows[1].reporting_period_end
+        ):
+            raise ValueError("period mutation split entry legs")
+        row_ids = frozenset(row.row_id for row in rows)
+        base_amount = next(row.debit_minor for row in rows if row.account == "receivables")
+        issues.append(
+            PublicIssue(
+                type="period_cutoff",
+                affected_ids=row_ids,
+                expected_amount_minor=base_amount,
+                currency=manifest.base_currency,
+                evidence_ids=row_ids | {invoice.doc_id, policy.doc_id},
+            )
+        )
+    return issues

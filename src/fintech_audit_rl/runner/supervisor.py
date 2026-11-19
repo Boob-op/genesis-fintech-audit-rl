@@ -13,9 +13,15 @@ from fintech_audit_rl.env.core import AuditEnv
 from fintech_audit_rl.errors.allocation import short_allocate
 from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognition
 from fintech_audit_rl.errors.fx import wrong_receipt_fx
+from fintech_audit_rl.errors.period import wrong_invoice_period
 from fintech_audit_rl.evaluation.service import Evaluator, Score
 from fintech_audit_rl.generator.company import clean_usd_company, seeded_clean_kzt
-from fintech_audit_rl.generator.truth import allocation_truth, duplicate_truth, fx_truth
+from fintech_audit_rl.generator.truth import (
+    allocation_truth,
+    duplicate_truth,
+    fx_truth,
+    period_truth,
+)
 from fintech_audit_rl.runner.isolation import isolated_worker_command
 from fintech_audit_rl.storage.public_store import PublicStore
 
@@ -51,6 +57,7 @@ def run_first_episode(
     allocation_actual_minor: int | None = None,
     fx_case: bool = False,
     fx_error: bool = False,
+    period_error: bool = False,
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
@@ -84,6 +91,11 @@ def run_first_episode(
     if fx_error:
         public, event = wrong_receipt_fx(public, public.payments[0].payment_id, "2026-11-09")
         issues = (*issues, fx_truth(public, event))
+    if period_error:
+        if fx_case or duplicate:
+            raise ValueError("period mutation is standalone in v1")
+        public, event = wrong_invoice_period(public, public.invoices[0].invoice_id)
+        issues = (*issues, period_truth(public, event))
     if transform == "shuffle":
         public = shuffle_ledger(public, seed)
     store = PublicStore(public)

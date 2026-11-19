@@ -183,6 +183,41 @@ def main() -> int:
                         "explanation": "Receipt uses a wrong FX date or rate.",
                     }
                 )
+        period_start = datetime.fromisoformat(manifest["period_start"])
+        period_end = datetime.fromisoformat(manifest["period_end"])
+        for invoice in invoice_docs:
+            rows = [
+                row
+                for row in records
+                if row["role"] == "invoice_recognition"
+                and row["invoice_id"] == invoice["invoice_id"]
+            ]
+            if len(rows) != 2:
+                continue
+            expected_inside = (
+                period_start <= datetime.fromisoformat(invoice["issued_at"]) < period_end
+            )
+            actual_inside = all(
+                row["reporting_period_start"] == manifest["period_start"]
+                and row["reporting_period_end"] == manifest["period_end"]
+                for row in rows
+            )
+            if expected_inside != actual_inside:
+                amount = next(row["debit_minor"] for row in rows if row["account"] == "receivables")
+                findings.append(
+                    {
+                        "type": "period_cutoff",
+                        "affected_ids": [row["row_id"] for row in rows],
+                        "claimed_amount_minor": amount,
+                        "currency": manifest["base_currency"],
+                        "evidence_ids": [
+                            invoice["doc_id"],
+                            *[row["row_id"] for row in rows],
+                            policy_id,
+                        ],
+                        "explanation": "Invoice recognition is assigned to the wrong period.",
+                    }
+                )
     ask(
         {
             "type": "submit",
