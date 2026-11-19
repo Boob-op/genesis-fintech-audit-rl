@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Policy
+from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
 
 
 @dataclass(frozen=True)
@@ -55,4 +55,46 @@ def duplicate_invoice_issues(
                 evidence_ids=row_ids | {invoice.doc_id, policy.doc_id},
             )
         )
+    return issues
+
+
+def allocation_issues(
+    policy: Policy,
+    invoices: tuple[Invoice, ...],
+    payments: tuple[Payment, ...],
+    ledger: tuple[LedgerRow, ...],
+) -> list[PublicIssue]:
+    """Compare declared source-unit instructions to complete public allocation rows."""
+    invoice_by_id = {invoice.invoice_id: invoice for invoice in invoices}
+    issues = []
+    for payment in payments:
+        for ref in payment.invoice_refs:
+            invoice = invoice_by_id.get(ref.invoice_id)
+            if invoice is None or invoice.currency != payment.currency:
+                raise ValueError("unsupported payment reference")
+            rows = [
+                row
+                for row in ledger
+                if row.role == "payment_allocation"
+                and row.payment_id == payment.payment_id
+                and row.invoice_id == ref.invoice_id
+                and row.account == "receivables"
+                and row.credit_minor > 0
+            ]
+            allocated = sum(row.allocated_source_minor or 0 for row in rows)
+            if allocated > ref.amount_minor:
+                raise ValueError("over-allocation is outside this passport")
+            if allocated == ref.amount_minor:
+                continue
+            evidence = {payment.doc_id, invoice.doc_id, policy.doc_id}
+            evidence.update(row.row_id for row in rows)
+            issues.append(
+                PublicIssue(
+                    type="partial_allocation",
+                    affected_ids=frozenset((payment.doc_id, invoice.doc_id)),
+                    expected_amount_minor=ref.amount_minor - allocated,
+                    currency=payment.currency,
+                    evidence_ids=frozenset(evidence),
+                )
+            )
     return issues

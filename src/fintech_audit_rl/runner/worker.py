@@ -88,6 +88,42 @@ def main() -> int:
                     "explanation": "Invoice recognition exceeds the genuine invoice amount.",
                 }
             )
+        payment_docs = ask(
+            {"type": "list_records", "table": "payments", "cursor": None, "limit": 50}
+        )["records"]
+        invoice_docs = ask(
+            {"type": "list_records", "table": "invoices", "cursor": None, "limit": 50}
+        )["records"]
+        invoice_by_id = {doc["invoice_id"]: doc for doc in invoice_docs}
+        for payment in payment_docs:
+            for ref in payment["invoice_refs"]:
+                invoice = invoice_by_id[ref["invoice_id"]]
+                credits = [
+                    row
+                    for row in records
+                    if row["role"] == "payment_allocation"
+                    and row["payment_id"] == payment["payment_id"]
+                    and row["invoice_id"] == ref["invoice_id"]
+                    and row["account"] == "receivables"
+                    and row["credit_minor"] > 0
+                ]
+                allocated = sum(row["allocated_source_minor"] for row in credits)
+                if allocated < ref["amount_minor"]:
+                    findings.append(
+                        {
+                            "type": "partial_allocation",
+                            "affected_ids": [payment["doc_id"], invoice["doc_id"]],
+                            "claimed_amount_minor": ref["amount_minor"] - allocated,
+                            "currency": payment["currency"],
+                            "evidence_ids": [
+                                payment["doc_id"],
+                                invoice["doc_id"],
+                                policy_id,
+                                *[row["row_id"] for row in credits],
+                            ],
+                            "explanation": "Recorded allocation is below the payment instruction.",
+                        }
+                    )
     ask(
         {
             "type": "submit",

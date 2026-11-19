@@ -10,10 +10,11 @@ from dataclasses import dataclass
 
 from fintech_audit_rl.benchmark.transforms import rename_ids, shuffle_ledger
 from fintech_audit_rl.env.core import AuditEnv
+from fintech_audit_rl.errors.allocation import short_allocate
 from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognition
 from fintech_audit_rl.evaluation.service import Evaluator, Score
 from fintech_audit_rl.generator.company import seeded_clean_kzt
-from fintech_audit_rl.generator.truth import duplicate_truth
+from fintech_audit_rl.generator.truth import allocation_truth, duplicate_truth
 from fintech_audit_rl.runner.isolation import isolated_worker_command
 from fintech_audit_rl.storage.public_store import PublicStore
 
@@ -46,6 +47,7 @@ def run_first_episode(
     timeout_seconds: float = 60.0,
     policy_seed: int = 0,
     isolated: bool = False,
+    allocation_actual_minor: int | None = None,
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
@@ -64,6 +66,14 @@ def run_first_episode(
     if duplicate:
         public, event = duplicate_invoice_recognition(clean, clean.invoices[0].invoice_id)
         issues = (duplicate_truth(public, event),)
+    if allocation_actual_minor is not None:
+        public, event = short_allocate(
+            public,
+            public.payments[0].payment_id,
+            public.invoices[0].invoice_id,
+            allocation_actual_minor,
+        )
+        issues = (*issues, allocation_truth(public, event))
     if transform == "shuffle":
         public = shuffle_ledger(public, seed)
     store = PublicStore(public)

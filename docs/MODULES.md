@@ -173,3 +173,7 @@ Worker не читает ни один файл runs. В closed-режиме р�
 ## Приёмка Б04.3
 
 [Контейнерный CI](https://github.com/Boob-op/genesis-fintech-audit-rl/actions/runs/44618281143) подтвердил текущий режим М10: worker без сети/host mounts, read-only root, non-root UID, без capabilities. Обычный developer subprocess остаётся явно не изолированным; повторять пробы после расширения данных.
+
+## Прогресс Б05.1
+
+М04 добавляет KZT-мутацию распределения; М05 строит закрытый truth; М06 отдельно восстанавливает shortage по публичному payment.invoice_refs и allocation credit rows. М11 worker сверяет первые два типа через публичные действия.

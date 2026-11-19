@@ -29,3 +29,43 @@ def duplicate_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssue
         currency=changed.manifest.base_currency,
         evidence_sets=[[invoice.doc_id, *row_ids, changed.policy.doc_id]],
     )
+
+
+def allocation_truth(changed: CleanCompany, event: ProvenanceEvent) -> TruthIssue:
+    if event.type != "partial_allocation" or len(event.public_ids) != 1:
+        raise ValueError("wrong allocation event")
+    payment = next((doc for doc in changed.payments if doc.doc_id == event.public_ids[0]), None)
+    if payment is None or len(payment.invoice_refs) != 1:
+        raise ValueError("unsupported allocation event")
+    ref = payment.invoice_refs[0]
+    invoice = next((doc for doc in changed.invoices if doc.invoice_id == ref.invoice_id), None)
+    if invoice is None:
+        raise ValueError("instructed invoice absent")
+    credits = [
+        row
+        for row in changed.ledger
+        if row.role == "payment_allocation"
+        and row.payment_id == payment.payment_id
+        and row.invoice_id == invoice.invoice_id
+        and row.account == "receivables"
+        and row.credit_minor > 0
+    ]
+    allocated = sum(row.allocated_source_minor or 0 for row in credits)
+    shortage = ref.amount_minor - allocated
+    if shortage <= 0:
+        raise ValueError("allocation was not reduced")
+    return TruthIssue(
+        issue_id=event.event_id,
+        type="partial_allocation",
+        affected_ids=[payment.doc_id, invoice.doc_id],
+        expected_amount_minor=shortage,
+        currency=payment.currency,
+        evidence_sets=[
+            [
+                payment.doc_id,
+                invoice.doc_id,
+                changed.policy.doc_id,
+                *[row.row_id for row in credits],
+            ]
+        ],
+    )
