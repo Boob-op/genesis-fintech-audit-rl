@@ -106,3 +106,7 @@ Q08–Q17 в `DECISIONS.md` фиксируют envelope, границы 100 ша
 ## Б03B.2 — первый сквозной проход
 
 `env/core.py`, `evaluation/service.py`, `runner/{supervisor,worker}.py` связали public store, reset/step, доверенную оценку и worker через JSON IPC. `tests/test_env_first.py`, `tests/test_runner_first.py` проверяют верный/пустой/невалидный submit, лимит 100 шагов, закрытый reward и replay; 55 локальных тестов прошли. Worker пока developer subprocess того же пользователя: R11/R18/OS-изоляция не закрыты; timeout и полный инструментальный контракт относятся к Б04.
+
+## Б03B.3 — политики и траектория
+
+Worker поддерживает минимальную сверку дубля и правдоподобную атаку flag-all через тот же публичный протокол. `reporting/trajectory.py` пишет agent-visible JSONL; `demo` запускает сценарий одной командой и выдаёт отдельный scored result владельцу запуска. `tests/test_policy_trajectories.py` показывает F1=1 против F1=0 для специально подготовленного дубля, закрытый placeholder и отсутствие truth/provenance в траектории. 58 локальных тестов прошли. Полные leak/rename/shuffle тесты — Б03B.4.

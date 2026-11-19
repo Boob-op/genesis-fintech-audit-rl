@@ -11,6 +11,9 @@ def ask(action: dict) -> dict:
 
 
 def main() -> int:
+    mode = sys.argv[1] if len(sys.argv) > 1 else "reconciliation"
+    if mode not in {"reconciliation", "flag_all"}:
+        return 2
     initial = json.loads(sys.stdin.readline())
     manifest = initial["observation"]["manifest"]
     policy_id = manifest["policy_doc_id"]
@@ -24,31 +27,48 @@ def main() -> int:
         cursor = observation["next_cursor"]
         if cursor is None:
             break
-    invoice_rows = {}
-    for row in records:
-        if row["role"] == "invoice_recognition":
-            invoice_rows.setdefault(row["invoice_id"], []).append(row)
     findings = []
-    for invoice_id, rows in invoice_rows.items():
-        entries = {row["entry_id"] for row in rows}
-        if len(entries) < 2:
-            continue
-        invoice_docs = ask(
-            {"type": "list_records", "table": "invoices", "cursor": None, "limit": 50}
-        )["records"]
-        invoice = next(item for item in invoice_docs if item["invoice_id"] == invoice_id)
-        amount = sum(row["debit_minor"] for row in rows if row["account"] == "receivables")
-        amount -= invoice["total_minor"]
-        findings.append(
-            {
-                "type": "duplicate_invoice",
-                "affected_ids": [row["row_id"] for row in rows],
-                "claimed_amount_minor": amount,
-                "currency": manifest["base_currency"],
-                "evidence_ids": [invoice["doc_id"], *[row["row_id"] for row in rows], policy_id],
-                "explanation": "Invoice recognition exceeds the genuine invoice amount.",
-            }
-        )
+    if mode == "flag_all":
+        for row in records[:30]:
+            findings.append(
+                {
+                    "type": "duplicate_invoice",
+                    "affected_ids": [row["row_id"]],
+                    "claimed_amount_minor": row["debit_minor"] or row["credit_minor"],
+                    "currency": manifest["base_currency"],
+                    "evidence_ids": [row["row_id"], policy_id],
+                    "explanation": "Flagged record.",
+                }
+            )
+    else:
+        invoice_rows = {}
+        for row in records:
+            if row["role"] == "invoice_recognition":
+                invoice_rows.setdefault(row["invoice_id"], []).append(row)
+        for invoice_id, rows in invoice_rows.items():
+            entries = {row["entry_id"] for row in rows}
+            if len(entries) < 2:
+                continue
+            invoice_docs = ask(
+                {"type": "list_records", "table": "invoices", "cursor": None, "limit": 50}
+            )["records"]
+            invoice = next(item for item in invoice_docs if item["invoice_id"] == invoice_id)
+            amount = sum(row["debit_minor"] for row in rows if row["account"] == "receivables")
+            amount -= invoice["total_minor"]
+            findings.append(
+                {
+                    "type": "duplicate_invoice",
+                    "affected_ids": [row["row_id"] for row in rows],
+                    "claimed_amount_minor": amount,
+                    "currency": manifest["base_currency"],
+                    "evidence_ids": [
+                        invoice["doc_id"],
+                        *[row["row_id"] for row in rows],
+                        policy_id,
+                    ],
+                    "explanation": "Invoice recognition exceeds the genuine invoice amount.",
+                }
+            )
     ask(
         {
             "type": "submit",

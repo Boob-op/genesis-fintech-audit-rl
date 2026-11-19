@@ -21,7 +21,11 @@ class RunResult:
     worker_exit_code: int
 
 
-def run_first_episode(seed: int, duplicate: bool = True, closed: bool = False) -> RunResult:
+def run_first_episode(
+    seed: int, duplicate: bool = True, closed: bool = False, policy: str = "reconciliation"
+) -> RunResult:
+    if policy not in {"reconciliation", "flag_all"}:
+        raise ValueError("unknown policy")
     clean, _private_generation = seeded_clean_kzt(seed)
     public = clean
     issues = ()
@@ -35,7 +39,7 @@ def run_first_episode(seed: int, duplicate: bool = True, closed: bool = False) -
     trajectory = []
     # This is a developer-mode process boundary. B04 must add actual file/network rights.
     process = subprocess.Popen(
-        [sys.executable, "-m", "fintech_audit_rl.runner.worker"],
+        [sys.executable, "-m", "fintech_audit_rl.runner.worker", policy],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
