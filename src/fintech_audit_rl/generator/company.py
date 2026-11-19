@@ -258,6 +258,180 @@ def seeded_clean_kzt(
     return company, metadata
 
 
+def clean_distractor_company(seed: int) -> tuple[CleanCompany, GenerationMetadata]:
+    """Clean split settlement, repeated invoice amount, advance, and explicit refund."""
+    base, metadata = seeded_clean_kzt(seed)
+    rng = Random(seed ^ 0xB062)
+
+    def opaque() -> str:
+        return f"id-{rng.getrandbits(128):032x}"
+
+    invoice = base.invoices[0]
+    entity_id = invoice.entity_id
+    first_payment = base.payments[0].model_copy(
+        update={
+            "amount_minor": 40000,
+            "invoice_refs": [
+                base.payments[0].invoice_refs[0].model_copy(update={"amount_minor": 40000})
+            ],
+        }
+    )
+    first_rows = tuple(
+        row.model_copy(
+            update={
+                "debit_minor": 40000
+                if row.debit_minor and row.role != "invoice_recognition"
+                else row.debit_minor,
+                "credit_minor": 40000
+                if row.credit_minor and row.role != "invoice_recognition"
+                else row.credit_minor,
+                "allocated_source_minor": 40000 if row.allocated_source_minor is not None else None,
+            }
+        )
+        for row in base.ledger
+    )
+    second_payment_id, second_doc_id = opaque(), opaque()
+    second_payment = first_payment.model_copy(
+        update={
+            "doc_id": second_doc_id,
+            "payment_id": second_payment_id,
+            "timestamp": datetime.fromisoformat("2026-11-12T10:00:00+05:00"),
+            "amount_minor": 60000,
+            "invoice_refs": [
+                first_payment.invoice_refs[0].model_copy(update={"amount_minor": 60000})
+            ],
+        }
+    )
+    repeated_invoice_id, repeated_doc_id = opaque(), opaque()
+    repeated_invoice = invoice.model_copy(
+        update={
+            "doc_id": repeated_doc_id,
+            "invoice_id": repeated_invoice_id,
+            "issued_at": datetime.fromisoformat("2026-11-05T09:00:00+05:00"),
+        }
+    )
+    advance_id, advance_doc_id = opaque(), opaque()
+    advance = first_payment.model_copy(
+        update={
+            "doc_id": advance_doc_id,
+            "payment_id": advance_id,
+            "timestamp": datetime.fromisoformat("2026-11-15T11:00:00+05:00"),
+            "amount_minor": 15000,
+            "invoice_refs": [],
+        }
+    )
+    refund_id, refund_doc_id = opaque(), opaque()
+    refund = advance.model_copy(
+        update={
+            "doc_id": refund_doc_id,
+            "payment_id": refund_id,
+            "timestamp": datetime.fromisoformat("2026-11-18T11:00:00+05:00"),
+            "kind": "refund",
+            "reverses_payment_id": advance_id,
+        }
+    )
+
+    def pair(
+        role,
+        timestamp,
+        debit_account,
+        credit_account,
+        amount,
+        invoice_id=None,
+        payment_id=None,
+        allocated=False,
+    ):
+        entry_id, debit_id, credit_id = opaque(), opaque(), opaque()
+        common = {
+            "entry_id": entry_id,
+            "timestamp": timestamp,
+            "effective_at": timestamp,
+            "role": role,
+            "invoice_id": invoice_id,
+            "payment_id": payment_id,
+            "entity_id": entity_id,
+        }
+        debit = first_rows[0].model_copy(
+            update={
+                **common,
+                "row_id": debit_id,
+                "account": debit_account,
+                "debit_minor": amount,
+                "credit_minor": 0,
+                "allocated_source_minor": None,
+            }
+        )
+        credit = first_rows[1].model_copy(
+            update={
+                **common,
+                "row_id": credit_id,
+                "account": credit_account,
+                "debit_minor": 0,
+                "credit_minor": amount,
+                "allocated_source_minor": amount if allocated else None,
+            }
+        )
+        return debit, credit
+
+    extra_rows = (
+        *pair(
+            "payment_receipt",
+            second_payment.timestamp,
+            "bank",
+            "unapplied_cash",
+            60000,
+            payment_id=second_payment_id,
+        ),
+        *pair(
+            "payment_allocation",
+            second_payment.timestamp,
+            "unapplied_cash",
+            "receivables",
+            60000,
+            invoice.invoice_id,
+            second_payment_id,
+            True,
+        ),
+        *pair(
+            "invoice_recognition",
+            repeated_invoice.issued_at,
+            "receivables",
+            "revenue",
+            100000,
+            repeated_invoice_id,
+        ),
+        *pair(
+            "payment_receipt",
+            advance.timestamp,
+            "bank",
+            "unapplied_cash",
+            15000,
+            payment_id=advance_id,
+        ),
+        *pair(
+            "payment_refund",
+            refund.timestamp,
+            "unapplied_cash",
+            "bank",
+            15000,
+            payment_id=refund_id,
+        ),
+    )
+    invoices = (invoice, repeated_invoice)
+    payments = (first_payment, second_payment, advance, refund)
+    ledger = (*first_rows, *extra_rows)
+    manifest = base.manifest.model_copy(
+        update={
+            "ledger_count": len(ledger),
+            "invoice_count": len(invoices),
+            "payment_count": len(payments),
+        }
+    )
+    return base.model_copy(
+        update={"manifest": manifest, "invoices": invoices, "payments": payments, "ledger": ledger}
+    ), metadata
+
+
 def clean_usd_company(seed: int) -> tuple[CleanCompany, GenerationMetadata]:
     """One USD invoice/settlement booked in KZT at 500.25, no realized FX gain."""
     base, metadata = seeded_clean_kzt(seed)

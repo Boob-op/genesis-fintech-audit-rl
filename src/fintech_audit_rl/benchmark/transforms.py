@@ -14,6 +14,7 @@ def rename_ids(company: CleanCompany) -> CleanCompany:
         "doc_id",
         "invoice_id",
         "payment_id",
+        "reverses_payment_id",
         "entity_id",
         "row_id",
         "entry_id",

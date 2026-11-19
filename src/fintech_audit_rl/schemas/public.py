@@ -79,7 +79,7 @@ class LedgerRow(StrictModel):
     entity_id: Id
     invoice_id: Id | None
     payment_id: Id | None
-    role: Literal["invoice_recognition", "payment_receipt", "payment_allocation"]
+    role: Literal["invoice_recognition", "payment_receipt", "payment_allocation", "payment_refund"]
     reporting_period_start: datetime
     reporting_period_end: datetime
     fx_date: str | None
@@ -141,6 +141,8 @@ class Payment(StrictModel):
     currency: Currency
     amount_minor: PositiveMoney
     invoice_refs: list[InvoiceRef]
+    kind: Literal["receipt", "refund"] = "receipt"
+    reverses_payment_id: Id | None = None
 
     _timestamp = field_validator("timestamp")(offset_time)
 
@@ -150,6 +152,10 @@ class Payment(StrictModel):
             raise ValueError("duplicate invoice reference")
         if sum(ref.amount_minor for ref in self.invoice_refs) > self.amount_minor:
             raise ValueError("references exceed payment")
+        if self.kind == "receipt" and self.reverses_payment_id is not None:
+            raise ValueError("receipt cannot reverse another payment")
+        if self.kind == "refund" and (self.reverses_payment_id is None or self.invoice_refs):
+            raise ValueError("refund requires one reversed payment and no invoice references")
         return self
 
 

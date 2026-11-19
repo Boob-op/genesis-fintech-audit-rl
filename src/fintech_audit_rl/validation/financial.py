@@ -77,7 +77,31 @@ def clean_kzt_errors(
             invoice.issued_at,
             invoice.entity_id,
         )
+    reversed_payment_ids: set[str] = set()
     for payment in payments:
+        if payment.kind == "refund":
+            reversed_id = payment.reverses_payment_id or ""
+            require(reversed_id not in reversed_payment_ids, "payment refunded more than once")
+            reversed_payment_ids.add(reversed_id)
+            reversed_payment = payment_by_id.get(reversed_id)
+            require(reversed_payment is not None, "refund references unknown payment")
+            if reversed_payment is not None:
+                require(reversed_payment.kind == "receipt", "refund must reverse a receipt")
+                require(not reversed_payment.invoice_refs, "refund may only reverse an advance")
+                require(reversed_payment.currency == payment.currency, "refund currency differs")
+                require(
+                    reversed_payment.amount_minor == payment.amount_minor, "refund amount differs"
+                )
+                require(reversed_payment.timestamp <= payment.timestamp, "refund precedes receipt")
+            key = ("payment_refund", payment.payment_id, None)
+            expected_entries[key] = (
+                "unapplied_cash",
+                "bank",
+                payment.amount_minor,
+                payment.timestamp,
+                "",
+            )
+            continue
         key = ("payment_receipt", payment.payment_id, None)
         expected_entries[key] = (
             "bank",
@@ -125,7 +149,7 @@ def clean_kzt_errors(
         if first.role == "invoice_recognition":
             key = (first.role, first.invoice_id or "", None)
             require(first.payment_id is None, f"{entry_id}: invoice entry links payment")
-        elif first.role == "payment_receipt":
+        elif first.role in {"payment_receipt", "payment_refund"}:
             key = (first.role, first.payment_id or "", None)
             require(first.invoice_id is None, f"{entry_id}: receipt links invoice")
         else:

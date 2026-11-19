@@ -15,7 +15,11 @@ from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognit
 from fintech_audit_rl.errors.fx import wrong_receipt_fx
 from fintech_audit_rl.errors.period import wrong_invoice_period
 from fintech_audit_rl.evaluation.service import Evaluator, Score
-from fintech_audit_rl.generator.company import clean_usd_company, seeded_clean_kzt
+from fintech_audit_rl.generator.company import (
+    clean_distractor_company,
+    clean_usd_company,
+    seeded_clean_kzt,
+)
 from fintech_audit_rl.generator.truth import (
     allocation_truth,
     duplicate_truth,
@@ -58,6 +62,7 @@ def run_first_episode(
     fx_case: bool = False,
     fx_error: bool = False,
     period_error: bool = False,
+    distractors: bool = False,
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
@@ -72,7 +77,17 @@ def run_first_episode(
         raise ValueError("FX case cannot contain duplicate invoice in v1")
     if fx_error and not fx_case:
         raise ValueError("FX mutation requires foreign case")
-    clean, _private_generation = clean_usd_company(seed) if fx_case else seeded_clean_kzt(seed)
+    if distractors and (
+        fx_case or duplicate or allocation_actual_minor is not None or period_error
+    ):
+        raise ValueError("clean distractors cannot be combined with v1 mutations")
+    clean, _private_generation = (
+        clean_distractor_company(seed)
+        if distractors
+        else clean_usd_company(seed)
+        if fx_case
+        else seeded_clean_kzt(seed)
+    )
     if transform == "rename":
         clean = rename_ids(clean)
     public = clean
