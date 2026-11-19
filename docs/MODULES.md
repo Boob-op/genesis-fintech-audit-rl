@@ -169,3 +169,7 @@ Worker не читает ни один файл runs. В closed-режиме р�
 ## Прогресс Б04.3
 
 М10 имеет явный isolated Docker launch без private mounts и отдельный developer subprocess. М11 random explorer использует отдельный seed политики. Фактический тест прав в CI должен пройти до приёмки OS-изоляции.
+
+## Приёмка Б04.3
+
+[Контейнерный CI](https://github.com/Boob-op/genesis-fintech-audit-rl/actions/runs/44618281143) подтвердил текущий режим М10: worker без сети/host mounts, read-only root, non-root UID, без capabilities. Обычный developer subprocess остаётся явно не изолированным; повторять пробы после расширения данных.
