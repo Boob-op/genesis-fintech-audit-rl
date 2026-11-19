@@ -1,0 +1,188 @@
+"""Small KZT receivables history for B02.2; no seeded variability yet."""
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
+from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
+
+
+class CleanCompany(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    manifest: Manifest
+    policy: Policy
+    invoices: tuple[Invoice, ...]
+    payments: tuple[Payment, ...]
+    ledger: tuple[LedgerRow, ...]
+
+
+def _row(
+    row_id: str,
+    entry_id: str,
+    timestamp: datetime,
+    account: str,
+    amount: int,
+    side: str,
+    role: str,
+    start: datetime,
+    end: datetime,
+    invoice_id: str | None,
+    payment_id: str | None,
+    allocated_source_minor: int | None = None,
+) -> LedgerRow:
+    return LedgerRow(
+        row_id=row_id,
+        entry_id=entry_id,
+        timestamp=timestamp,
+        effective_at=timestamp,
+        account=account,
+        debit_minor=amount if side == "debit" else 0,
+        credit_minor=amount if side == "credit" else 0,
+        currency="KZT",
+        entity_id="entity-1",
+        invoice_id=invoice_id,
+        payment_id=payment_id,
+        role=role,
+        reporting_period_start=start,
+        reporting_period_end=end,
+        fx_date=None,
+        fx_rate=None,
+        allocated_source_minor=allocated_source_minor,
+    )
+
+
+def clean_kzt_company() -> CleanCompany:
+    """One invoice and a legal partial payment: 40000 KZT minor remains receivable."""
+    start = datetime.fromisoformat("2026-11-01T00:00:00+05:00")
+    end = datetime.fromisoformat("2026-12-01T00:00:00+05:00")
+    issued = datetime.fromisoformat("2026-11-03T09:00:00+05:00")
+    paid = datetime.fromisoformat("2026-11-10T12:00:00+05:00")
+    policy = Policy(
+        doc_id="policy-1",
+        timezone="Asia/Qyzylorda",
+        period_start=start,
+        period_end=end,
+        currency_exponents={"KZT": 2, "USD": 2, "JPY": 0},
+        rounding="ROUND_HALF_EVEN",
+        invoice_recognition="issued_at",
+        payment_recognition="timestamp",
+        fx_date_rule="local_event_date",
+        allocation_rule="immediate_invoice_refs",
+    )
+    invoice = Invoice(
+        doc_id="doc-invoice-1",
+        invoice_id="invoice-1",
+        entity_id="entity-1",
+        issued_at=issued,
+        due_at=end,
+        currency="KZT",
+        total_minor=100000,
+        line_items=[{"description": "Synthetic service", "amount_minor": 100000}],
+    )
+    payment = Payment(
+        doc_id="doc-payment-1",
+        payment_id="payment-1",
+        timestamp=paid,
+        currency="KZT",
+        amount_minor=60000,
+        invoice_refs=[{"invoice_id": "invoice-1", "amount_minor": 60000}],
+    )
+    ledger = (
+        _row(
+            "row-1",
+            "entry-1",
+            issued,
+            "receivables",
+            100000,
+            "debit",
+            "invoice_recognition",
+            start,
+            end,
+            "invoice-1",
+            None,
+        ),
+        _row(
+            "row-2",
+            "entry-1",
+            issued,
+            "revenue",
+            100000,
+            "credit",
+            "invoice_recognition",
+            start,
+            end,
+            "invoice-1",
+            None,
+        ),
+        _row(
+            "row-3",
+            "entry-2",
+            paid,
+            "bank",
+            60000,
+            "debit",
+            "payment_receipt",
+            start,
+            end,
+            None,
+            "payment-1",
+        ),
+        _row(
+            "row-4",
+            "entry-2",
+            paid,
+            "unapplied_cash",
+            60000,
+            "credit",
+            "payment_receipt",
+            start,
+            end,
+            None,
+            "payment-1",
+        ),
+        _row(
+            "row-5",
+            "entry-3",
+            paid,
+            "unapplied_cash",
+            60000,
+            "debit",
+            "payment_allocation",
+            start,
+            end,
+            "invoice-1",
+            "payment-1",
+        ),
+        _row(
+            "row-6",
+            "entry-3",
+            paid,
+            "receivables",
+            60000,
+            "credit",
+            "payment_allocation",
+            start,
+            end,
+            "invoice-1",
+            "payment-1",
+            60000,
+        ),
+    )
+    manifest = Manifest(
+        schema_version="1.0.0",
+        episode_id="clean-kzt-1",
+        base_currency="KZT",
+        period_start=start,
+        period_end=end,
+        timezone=policy.timezone,
+        ledger_count=len(ledger),
+        invoice_count=1,
+        payment_count=1,
+        fx_count=0,
+        policy_doc_id=policy.doc_id,
+        rounding=policy.rounding,
+    )
+    return CleanCompany(
+        manifest=manifest, policy=policy, invoices=(invoice,), payments=(payment,), ledger=ledger
+    )
