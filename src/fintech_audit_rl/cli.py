@@ -20,20 +20,35 @@ def main(argv: list[str] | None = None) -> int:
     demo.add_argument("--output", type=Path, default=Path("runs/demo/trajectories.jsonl"))
     demo.add_argument("--clean", action="store_true")
     demo.add_argument("--closed", action="store_true")
-    demo.add_argument("--policy", choices=["reconciliation", "flag_all"], default="reconciliation")
+    demo.add_argument(
+        "--policy",
+        choices=["reconciliation", "flag_all", "random_explorer"],
+        default="reconciliation",
+    )
+    demo.add_argument("--policy-seed", type=int, default=0)
+    demo.add_argument("--isolated", action="store_true")
     args = parser.parse_args(argv)
     if args.command == "demo":
         from fintech_audit_rl.reporting.trajectory import write_trajectory
         from fintech_audit_rl.runner.supervisor import run_first_episode
 
         result = run_first_episode(
-            args.seed, duplicate=not args.clean, closed=args.closed, policy=args.policy
+            args.seed,
+            duplicate=not args.clean,
+            closed=args.closed,
+            policy=args.policy,
+            policy_seed=args.policy_seed,
+            isolated=args.isolated,
         )
         write_trajectory(args.output, result.trajectory)
         print(
             json.dumps(
                 {
-                    "mode": "developer_subprocess_not_os_isolated",
+                    "mode": (
+                        "container_isolated"
+                        if args.isolated
+                        else "developer_subprocess_not_os_isolated"
+                    ),
                     "steps": result.steps,
                     "f1": str(result.score.metrics.f1) if result.score.metrics else None,
                     "scored_reward": str(result.score.reward),

@@ -14,6 +14,7 @@ from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognit
 from fintech_audit_rl.evaluation.service import Evaluator, Score
 from fintech_audit_rl.generator.company import seeded_clean_kzt
 from fintech_audit_rl.generator.truth import duplicate_truth
+from fintech_audit_rl.runner.isolation import isolated_worker_command
 from fintech_audit_rl.storage.public_store import PublicStore
 
 
@@ -43,9 +44,13 @@ def run_first_episode(
     policy: str = "reconciliation",
     transform: str = "none",
     timeout_seconds: float = 60.0,
+    policy_seed: int = 0,
+    isolated: bool = False,
 ) -> RunResult:
-    if policy not in {"reconciliation", "flag_all"}:
+    if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
+    if type(policy_seed) is not int:
+        raise ValueError("policy seed must be integer")
     if transform not in {"none", "rename", "shuffle"}:
         raise ValueError("unknown transform")
     if not 0 <= timeout_seconds <= 60:
@@ -66,9 +71,13 @@ def run_first_episode(
     env = AuditEnv(store, evaluator.score, evaluator.empty_score, closed=closed)
     initial, info = env.reset()
     trajectory = []
-    # This is a developer-mode process boundary. B04 must add actual file/network rights.
+    command = (
+        isolated_worker_command(policy, policy_seed)
+        if isolated
+        else [sys.executable, "-m", "fintech_audit_rl.runner.worker", policy, str(policy_seed)]
+    )
     process = subprocess.Popen(
-        [sys.executable, "-m", "fintech_audit_rl.runner.worker", policy],
+        command,
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

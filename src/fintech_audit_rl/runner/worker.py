@@ -1,6 +1,7 @@
 """Developer worker: public JSON messages only, without evaluator imports."""
 
 import json
+import random
 import sys
 
 
@@ -12,7 +13,7 @@ def ask(action: dict) -> dict:
 
 def main() -> int:
     mode = sys.argv[1] if len(sys.argv) > 1 else "reconciliation"
-    if mode not in {"reconciliation", "flag_all"}:
+    if mode not in {"reconciliation", "flag_all", "random_explorer"}:
         return 2
     initial = json.loads(sys.stdin.readline())
     manifest = initial["observation"]["manifest"]
@@ -27,6 +28,24 @@ def main() -> int:
         cursor = observation["next_cursor"]
         if cursor is None:
             break
+    if mode == "random_explorer":
+        policy_seed = int(sys.argv[2]) if len(sys.argv) > 2 else 0
+        rng = random.Random(policy_seed)
+        for _ in range(8):
+            if rng.randrange(2):
+                ask({"type": "calculator", "expression": f"{rng.randrange(100)} + 1"})
+            else:
+                ask({"type": "get_record", "table": "ledger", "id": rng.choice(records)["row_id"]})
+        ask(
+            {
+                "type": "submit",
+                "submission": {
+                    "episode_id": manifest["episode_id"],
+                    "findings": [],
+                },
+            }
+        )
+        return 0
     findings = []
     if mode == "flag_all":
         for row in records[:30]:

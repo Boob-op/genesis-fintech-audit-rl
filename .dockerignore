@@ -7,6 +7,8 @@ __pycache__
 .ruff_cache
 tmp
 runs
+episodes
+private
 .env
 .env.*
 *.pem

@@ -85,3 +85,12 @@ python -m fintech_audit_rl demo --seed 101 --output runs/demo/trajectories.jsonl
 ```
 
 Это developer subprocess первого KZT-сценария, без подтверждённой OS-изоляции и полного набора ошибок. Вывод содержит метрики и путь к JSONL; closed-режим в траектории показывает агенту нулевой placeholder, фактическая оценка выводится владельцу запуска.
+
+Для подготовленного образа можно запустить worker в изолированном контейнере:
+
+```sh
+docker build -t genesis-audit-dev .
+python -m fintech_audit_rl demo --seed 101 --isolated --output runs/isolated/trajectories.jsonl
+```
+
+Этот режим требует доступного Docker. Образ собирается заранее с сетью; worker запускается без сети, host mounts и с read-only файловой системой. Результат фактической проверки прав фиксируется в GitHub Actions после её прохождения.
