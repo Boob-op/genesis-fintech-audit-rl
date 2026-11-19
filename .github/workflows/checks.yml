@@ -1,0 +1,25 @@
+name: Development checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  foundation:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.13.9"
+      - run: uv sync --locked --dev --python 3.11
+      - run: uv run --no-sync python -m fintech_audit_rl verify
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t genesis-audit-dev .
+      - run: docker run --rm --network none --cpus 2 --memory 4g genesis-audit-dev
