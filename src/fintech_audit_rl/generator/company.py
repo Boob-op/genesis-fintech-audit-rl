@@ -1,9 +1,11 @@
 """Small KZT receivables history for B02.2; no seeded variability yet."""
 
 from datetime import datetime
+from random import Random
 
 from pydantic import BaseModel, ConfigDict
 
+from fintech_audit_rl.schemas.private import GenerationMetadata
 from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Manifest, Payment, Policy
 
 
@@ -186,3 +188,70 @@ def clean_kzt_company() -> CleanCompany:
     return CleanCompany(
         manifest=manifest, policy=policy, invoices=(invoice,), payments=(payment,), ledger=ledger
     )
+
+
+def seeded_clean_kzt(
+    seed: int, config_version: str = "1"
+) -> tuple[CleanCompany, GenerationMetadata]:
+    """Generate local opaque IDs; keep seed only in trusted metadata."""
+    if type(seed) is not int or not config_version:
+        raise ValueError("seed must be integer and config_version nonempty")
+    base = clean_kzt_company()
+    rng = Random(seed)
+    old_ids = [
+        base.manifest.episode_id,
+        base.policy.doc_id,
+        base.invoices[0].doc_id,
+        base.invoices[0].invoice_id,
+        base.invoices[0].entity_id,
+        base.payments[0].doc_id,
+        base.payments[0].payment_id,
+        *(row.row_id for row in base.ledger),
+        *(row.entry_id for row in base.ledger),
+    ]
+    mapping = {old: f"id-{rng.getrandbits(128):032x}" for old in dict.fromkeys(old_ids)}
+
+    def new(old: str | None) -> str | None:
+        return mapping[old] if old is not None else None
+
+    policy = base.policy.model_copy(update={"doc_id": new(base.policy.doc_id)})
+    invoice = base.invoices[0].model_copy(
+        update={
+            "doc_id": new(base.invoices[0].doc_id),
+            "invoice_id": new(base.invoices[0].invoice_id),
+            "entity_id": new(base.invoices[0].entity_id),
+        }
+    )
+    payment = base.payments[0].model_copy(
+        update={
+            "doc_id": new(base.payments[0].doc_id),
+            "payment_id": new(base.payments[0].payment_id),
+            "invoice_refs": [
+                ref.model_copy(update={"invoice_id": new(ref.invoice_id)})
+                for ref in base.payments[0].invoice_refs
+            ],
+        }
+    )
+    ledger = tuple(
+        row.model_copy(
+            update={
+                "row_id": new(row.row_id),
+                "entry_id": new(row.entry_id),
+                "entity_id": new(row.entity_id),
+                "invoice_id": new(row.invoice_id),
+                "payment_id": new(row.payment_id),
+            }
+        )
+        for row in base.ledger
+    )
+    manifest = base.manifest.model_copy(
+        update={
+            "episode_id": new(base.manifest.episode_id),
+            "policy_doc_id": policy.doc_id,
+        }
+    )
+    company = CleanCompany(
+        manifest=manifest, policy=policy, invoices=(invoice,), payments=(payment,), ledger=ledger
+    )
+    metadata = GenerationMetadata(seed=seed, config_version=config_version, spec_version="1.0.0")
+    return company, metadata

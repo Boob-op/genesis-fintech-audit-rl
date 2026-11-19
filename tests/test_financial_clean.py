@@ -2,7 +2,16 @@
 
 import pytest
 
-from fintech_audit_rl.generator.company import clean_kzt_company
+from fintech_audit_rl.domain.spec import load_error_spec
+from fintech_audit_rl.generator.company import clean_kzt_company, seeded_clean_kzt
+from fintech_audit_rl.schemas.public import Invoice, LedgerRow, Payment
+from fintech_audit_rl.storage.codec import (
+    csv_records,
+    json_record,
+    jsonl_records,
+    parse_csv,
+    parse_jsonl,
+)
 from fintech_audit_rl.validation.financial import clean_kzt_errors
 
 
@@ -14,6 +23,31 @@ def inspect(company):
 
 def test_clean_company_passes_public_financial_check():
     assert inspect(clean_kzt_company()) == []
+
+
+def test_seeded_clean_company_replays_and_keeps_seed_private():
+    company, metadata = seeded_clean_kzt(41)
+    replay, replay_metadata = seeded_clean_kzt(41)
+    different, _ = seeded_clean_kzt(42)
+    assert company == replay
+    assert metadata == replay_metadata
+    assert company.manifest.episode_id != different.manifest.episode_id
+    assert inspect(company) == []
+    public = json_record(company.manifest) + json_record(company.policy)
+    public += jsonl_records(company.invoices) + jsonl_records(company.payments)
+    public += csv_records(company.ledger, LedgerRow)
+    assert '"seed"' not in public
+    assert '"truth"' not in public
+    assert '"provenance"' not in public
+    assert parse_jsonl(jsonl_records(company.invoices), Invoice) == list(company.invoices)
+    assert parse_jsonl(jsonl_records(company.payments), Payment) == list(company.payments)
+    assert parse_csv(csv_records(company.ledger, LedgerRow), LedgerRow) == list(company.ledger)
+
+
+def test_single_versioned_error_spec_loads():
+    spec = load_error_spec()
+    assert spec["spec_version"] == "1.0.0"
+    assert len(spec["errors"]) == 4
 
 
 @pytest.mark.parametrize(
