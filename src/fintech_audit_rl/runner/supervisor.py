@@ -18,6 +18,7 @@ from fintech_audit_rl.evaluation.service import Evaluator, Score
 from fintech_audit_rl.generator.company import (
     clean_distractor_company,
     clean_usd_company,
+    scaled_clean_kzt_company,
     seeded_clean_kzt,
 )
 from fintech_audit_rl.generator.truth import (
@@ -63,6 +64,7 @@ def run_first_episode(
     fx_error: bool = False,
     period_error: bool = False,
     distractors: bool = False,
+    scale_pairs: int | None = None,
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
@@ -81,8 +83,12 @@ def run_first_episode(
         fx_case or duplicate or allocation_actual_minor is not None or period_error
     ):
         raise ValueError("clean distractors cannot be combined with v1 mutations")
+    if scale_pairs is not None and (distractors or fx_case or period_error):
+        raise ValueError("scaled KZT case cannot use distractors, FX, or period mutation")
     clean, _private_generation = (
-        clean_distractor_company(seed)
+        scaled_clean_kzt_company(seed, scale_pairs)
+        if scale_pairs is not None
+        else clean_distractor_company(seed)
         if distractors
         else clean_usd_company(seed)
         if fx_case

@@ -432,6 +432,93 @@ def clean_distractor_company(seed: int) -> tuple[CleanCompany, GenerationMetadat
     ), metadata
 
 
+def scaled_clean_kzt_company(seed: int, pairs: int = 34) -> tuple[CleanCompany, GenerationMetadata]:
+    """Generate 6 meaningful rows per fully settled invoice/payment pair."""
+    if type(pairs) is not int or not 1 <= pairs <= 50:
+        raise ValueError("pairs must be between 1 and 50")
+    base, metadata = seeded_clean_kzt(seed)
+    rng = Random(seed ^ 0xB063)
+
+    def opaque() -> str:
+        return f"id-{rng.getrandbits(128):032x}"
+
+    invoices = []
+    payments = []
+    ledger = []
+    for index in range(pairs):
+        amount = 100000 + index * 100
+        issued = datetime.fromisoformat(
+            f"2026-11-{2 + index % 20:02d}T{8 + index % 8:02d}:00:00+05:00"
+        )
+        paid = issued.replace(hour=min(23, issued.hour + 2))
+        invoice_id, invoice_doc_id, entity_id = opaque(), opaque(), opaque()
+        payment_id, payment_doc_id = opaque(), opaque()
+        invoice = base.invoices[0].model_copy(
+            update={
+                "doc_id": invoice_doc_id,
+                "invoice_id": invoice_id,
+                "entity_id": entity_id,
+                "issued_at": issued,
+                "total_minor": amount,
+                "line_items": [
+                    base.invoices[0].line_items[0].model_copy(update={"amount_minor": amount})
+                ],
+            }
+        )
+        payment = base.payments[0].model_copy(
+            update={
+                "doc_id": payment_doc_id,
+                "payment_id": payment_id,
+                "timestamp": paid,
+                "amount_minor": amount,
+                "invoice_refs": [
+                    base.payments[0]
+                    .invoice_refs[0]
+                    .model_copy(update={"invoice_id": invoice_id, "amount_minor": amount})
+                ],
+            }
+        )
+        entry_ids = [opaque(), opaque(), opaque()]
+        for row_index, template in enumerate(base.ledger):
+            role_index = 0 if row_index < 2 else 1 if row_index < 4 else 2
+            timestamp = issued if role_index == 0 else paid
+            ledger.append(
+                template.model_copy(
+                    update={
+                        "row_id": opaque(),
+                        "entry_id": entry_ids[role_index],
+                        "timestamp": timestamp,
+                        "effective_at": timestamp,
+                        "entity_id": entity_id,
+                        "invoice_id": invoice_id if role_index != 1 else None,
+                        "payment_id": payment_id if role_index != 0 else None,
+                        "debit_minor": amount if template.debit_minor else 0,
+                        "credit_minor": amount if template.credit_minor else 0,
+                        "allocated_source_minor": amount
+                        if template.allocated_source_minor is not None
+                        else None,
+                    }
+                )
+            )
+        invoices.append(invoice)
+        payments.append(payment)
+    manifest = base.manifest.model_copy(
+        update={
+            "ledger_count": len(ledger),
+            "invoice_count": len(invoices),
+            "payment_count": len(payments),
+        }
+    )
+    return base.model_copy(
+        update={
+            "manifest": manifest,
+            "invoices": tuple(invoices),
+            "payments": tuple(payments),
+            "ledger": tuple(ledger),
+        }
+    ), metadata
+
+
 def clean_usd_company(seed: int) -> tuple[CleanCompany, GenerationMetadata]:
     """One USD invoice/settlement booked in KZT at 500.25, no realized FX gain."""
     base, metadata = seeded_clean_kzt(seed)
