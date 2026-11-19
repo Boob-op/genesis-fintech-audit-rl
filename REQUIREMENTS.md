@@ -102,3 +102,7 @@ Q08–Q17 в `DECISIONS.md` фиксируют envelope, границы 100 ша
 ## Частичная Б03B.2
 
 `storage/public_store.py` принимает только публичный bundle, отдаёт документы и стабильные страницы ledger/invoices/payments, ограниченно обрабатывает чужой cursor и неизвестный ID. `tests/test_public_store.py` прошёл; всего 48 локальных тестов. FX rows, env reset/step, supervisor/worker и реальная граница прав ещё не реализованы, поэтому Б03B.2 остаётся открытой.
+
+## Б03B.2 — первый сквозной проход
+
+`env/core.py`, `evaluation/service.py`, `runner/{supervisor,worker}.py` связали public store, reset/step, доверенную оценку и worker через JSON IPC. `tests/test_env_first.py`, `tests/test_runner_first.py` проверяют верный/пустой/невалидный submit, лимит 100 шагов, закрытый reward и replay; 55 локальных тестов прошли. Worker пока developer subprocess того же пользователя: R11/R18/OS-изоляция не закрыты; timeout и полный инструментальный контракт относятся к Б04.
