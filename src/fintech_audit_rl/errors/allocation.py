@@ -1,7 +1,9 @@
-"""Reduce or remove an instructed KZT payment allocation."""
+"""Reduce or remove an instructed payment allocation in source units."""
 
 from hashlib import sha256
 
+from fintech_audit_rl.domain.money import convert_minor
+from fintech_audit_rl.domain.time import local_fx_date
 from fintech_audit_rl.generator.company import CleanCompany
 from fintech_audit_rl.schemas.private import ProvenanceEvent
 
@@ -28,15 +30,37 @@ def short_allocate(
     ]
     if len(pair) != 2 or {row.account for row in pair} != {"receivables", "unapplied_cash"}:
         raise ValueError("expected one complete allocation entry")
-    if any(row.currency != payment.currency for row in pair):
-        raise ValueError("KZT allocation mutation only")
+    if any(row.currency != clean.manifest.base_currency for row in pair):
+        raise ValueError("allocation ledger currency differs from base")
+    if payment.currency == clean.manifest.base_currency:
+        base_minor = actual_source_minor
+    else:
+        required_date = local_fx_date(payment.timestamp, clean.policy.timezone)
+        reference = next(
+            (
+                row
+                for row in clean.fx
+                if row.date == required_date
+                and row.source_currency == payment.currency
+                and row.target_currency == clean.manifest.base_currency
+            ),
+            None,
+        )
+        if reference is None:
+            raise ValueError("reference FX unavailable")
+        base_minor = convert_minor(
+            actual_source_minor,
+            reference.rate,
+            clean.policy.currency_exponents[payment.currency],
+            clean.policy.currency_exponents[clean.manifest.base_currency],
+        )
     affected_rows = {row.row_id for row in pair}
     if actual_source_minor:
         ledger = tuple(
             row.model_copy(
                 update={
-                    "debit_minor": actual_source_minor if row.debit_minor else 0,
-                    "credit_minor": actual_source_minor if row.credit_minor else 0,
+                    "debit_minor": base_minor if row.debit_minor else 0,
+                    "credit_minor": base_minor if row.credit_minor else 0,
                     "allocated_source_minor": actual_source_minor
                     if row.account == "receivables"
                     else None,
