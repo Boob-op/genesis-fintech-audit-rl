@@ -1,6 +1,6 @@
 """Strict public episode records. Financial consistency is checked elsewhere."""
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -30,6 +30,17 @@ def offset_time(value: datetime) -> datetime:
     return value
 
 
+def policy_timezone(name: str):
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        if name == "Asia/Qyzylorda":
+            # Windows Python may lack the IANA database. This fallback covers
+            # the synthetic November 2026 fixture; historic dates need tzdata.
+            return timezone(timedelta(hours=5), name)
+        raise ValueError("unknown timezone") from None
+
+
 class Manifest(StrictModel):
     schema_version: Id
     episode_id: Id
@@ -51,10 +62,7 @@ class Manifest(StrictModel):
     def valid_period(self):
         if self.period_start >= self.period_end:
             raise ValueError("period_start must precede period_end")
-        try:
-            ZoneInfo(self.timezone)
-        except ZoneInfoNotFoundError as error:
-            raise ValueError("unknown timezone") from error
+        policy_timezone(self.timezone)
         return self
 
 
@@ -196,8 +204,5 @@ class Policy(StrictModel):
     def valid_period(self):
         if self.period_start >= self.period_end:
             raise ValueError("invalid policy period")
-        try:
-            ZoneInfo(self.timezone)
-        except ZoneInfoNotFoundError as error:
-            raise ValueError("unknown timezone") from error
+        policy_timezone(self.timezone)
         return self
