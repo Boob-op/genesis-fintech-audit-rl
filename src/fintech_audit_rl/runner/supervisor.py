@@ -5,6 +5,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
+from fintech_audit_rl.benchmark.transforms import rename_ids, shuffle_ledger
 from fintech_audit_rl.env.core import AuditEnv
 from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognition
 from fintech_audit_rl.evaluation.service import Evaluator, Score
@@ -22,16 +23,26 @@ class RunResult:
 
 
 def run_first_episode(
-    seed: int, duplicate: bool = True, closed: bool = False, policy: str = "reconciliation"
+    seed: int,
+    duplicate: bool = True,
+    closed: bool = False,
+    policy: str = "reconciliation",
+    transform: str = "none",
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all"}:
         raise ValueError("unknown policy")
+    if transform not in {"none", "rename", "shuffle"}:
+        raise ValueError("unknown transform")
     clean, _private_generation = seeded_clean_kzt(seed)
+    if transform == "rename":
+        clean = rename_ids(clean)
     public = clean
     issues = ()
     if duplicate:
         public, event = duplicate_invoice_recognition(clean, clean.invoices[0].invoice_id)
         issues = (duplicate_truth(public, event),)
+    if transform == "shuffle":
+        public = shuffle_ledger(public, seed)
     store = PublicStore(public)
     evaluator = Evaluator(public.manifest.episode_id, issues, store.public_ids)
     env = AuditEnv(store, evaluator.score, evaluator.empty_score, closed=closed)

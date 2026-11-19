@@ -110,3 +110,7 @@ Q08–Q17 в `DECISIONS.md` фиксируют envelope, границы 100 ша
 ## Б03B.3 — политики и траектория
 
 Worker поддерживает минимальную сверку дубля и правдоподобную атаку flag-all через тот же публичный протокол. `reporting/trajectory.py` пишет agent-visible JSONL; `demo` запускает сценарий одной командой и выдаёт отдельный scored result владельцу запуска. `tests/test_policy_trajectories.py` показывает F1=1 против F1=0 для специально подготовленного дубля, закрытый placeholder и отсутствие truth/provenance в траектории. 58 локальных тестов прошли. Полные leak/rename/shuffle тесты — Б03B.4.
+
+## Приёмка первого Б03B
+
+`benchmark/transforms.py` и `tests/test_first_transforms.py` проверяют согласованное переименование публичных ID, перестановку строк, неизменную F1/reward, отсутствие private issue ID в закрытой траектории. `test_runner_first.py` проверяет точный replay seed/действий/награды. Всего 61 локальный тест прошёл. Первый demo выполняет public worker → JSON IPC → trusted evaluator и пишет траекторию. OS-права worker, калькулятор, timeout и полное покрытие инструментов остаются Б04; R11/R18/R20 ещё не закрыты.
