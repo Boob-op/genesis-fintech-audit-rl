@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from decimal import Decimal
 
+from fintech_audit_rl.env.calculator import calculate
 from fintech_audit_rl.evaluation.service import Score
 from fintech_audit_rl.storage.public_store import PublicStore
 
@@ -78,4 +79,6 @@ class AuditEnv:
             return {"record": self._store.get_record(action["table"], action["id"])}
         if kind == "get_document" and set(action) == {"type", "doc_id"}:
             return {"document": self._store.get_document(action["doc_id"])}
+        if kind == "calculator" and set(action) == {"type", "expression"}:
+            return {"result": calculate(action["expression"])}
         raise ValueError("unknown action")
