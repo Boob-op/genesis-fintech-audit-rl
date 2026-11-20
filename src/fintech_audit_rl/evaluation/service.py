@@ -19,9 +19,28 @@ class Score:
 
 class Evaluator:
     def __init__(self, episode_id: str, issues: tuple[TruthIssue, ...], public_ids: set[str]):
+        if len({issue.issue_id for issue in issues}) != len(issues):
+            raise ValueError("duplicate truth issue ID")
+        public = frozenset(public_ids)
+        semantic_keys = set()
+        for issue in issues:
+            referenced = set(issue.affected_ids)
+            referenced.update(item for evidence in issue.evidence_sets for item in evidence)
+            if not referenced <= public:
+                raise ValueError("truth references non-public evidence")
+            key = (
+                issue.type,
+                frozenset(issue.affected_ids),
+                issue.expected_amount_minor,
+                issue.currency,
+                frozenset(frozenset(evidence) for evidence in issue.evidence_sets),
+            )
+            if key in semantic_keys:
+                raise ValueError("duplicate semantic truth issue")
+            semantic_keys.add(key)
         self._episode_id = episode_id
         self._issues = issues
-        self._public_ids = frozenset(public_ids)
+        self._public_ids = public
 
     def score(self, submission: dict, inspection_steps: int) -> Score:
         try:
