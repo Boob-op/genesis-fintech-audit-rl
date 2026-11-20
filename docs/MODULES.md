@@ -217,3 +217,7 @@ Worker не читает ни один файл runs. В closed-режиме р�
 ## Прогресс Б08.1
 
 М13 содержит единый `EpisodeConfig/build_episode`, которым теперь пользуются supervisor и exporter. Открытые 10 train + 10 dev записаны в `episodes/`; 20 internal holdout остаются отдельными конфигурациями, а не публикуемым скрытым набором. Парные rename/shuffle проверки для 20 открытых эпизодов сохраняют oracle F1/reward. Export детерминирован и round-trip проверен. Следующий шаг — общий benchmark четырёх адаптеров Б08.2.
+
+## Прогресс Б08.2
+
+М10–М13 используют `benchmark/runner.py` для одинакового запуска четырёх адаптеров. Reconciliation, flag-all и random explorer остаются обычными worker policy; oracle выполняется только доверенно и маркируется privileged. 80 результатов записаны в `reports/adapter_runs.json`, привязаны к тем же config_name/episode_id и воспроизводимы. Следующий шаг — Б08.3: траектории, агрегация, измерения и честный разбор сбоев.

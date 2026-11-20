@@ -174,3 +174,7 @@ Evaluator проверяет целостность доверенного truth
 ## Б08.1 — наборы эпизодов
 
 `benchmark/suites.py` стал единым сборщиком для supervisor и экспорта. В `episodes/` записаны 10 train и 10 dev с manifest/policy/ledger/invoices/payments/fx и отдельными truth/provenance/generation; `index.json` описывает конфигурацию и покрытие. Отдельные 20 internal holdout не экспортируются и имеют непересекающиеся seed/episode ID, ровно пять clean и пять interaction. Для 20 открытых конфигураций oracle-пары rename/shuffle сохраняют F1/reward. `tests/test_suites.py` проверяет размеры, покрытие четырёх типов, два interaction, масштаб ≥200 строк, byte-deterministic export, round-trip counts, checked-in данные и наличие открытых episodes в Docker-контексте при исключённом корневом private. Полная регрессия: 149 тестов.
+
+## Б08.2 — четыре адаптера
+
+`benchmark/runner.py` задаёт единый результат для reconciliation, flag-all, random explorer и oracle. Три обычных адаптера проходят через public JSON worker; oracle запускается у evaluator, явно помечен privileged и не получает искусственно сравнимую стоимость исследования. `reports/adapter_runs.json` содержит 80 запусков на одинаковых 20 train/dev: reconciliation и oracle получили 18 TP без FP/FN и F1=1 во всех эпизодах; flag-all — 196 FP, 18 FN и mean F1=0; random explorer — 18 FN и mean F1=0.30 за счёт шести clean эпизодов. Результаты воспроизводимы и связаны с config/episode ID; 152 теста прошли. Агрегирование времени/памяти и failure analysis остаются Б08.3.
