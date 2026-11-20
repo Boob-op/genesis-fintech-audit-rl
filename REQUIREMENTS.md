@@ -170,3 +170,7 @@ Evaluator проверяет целостность доверенного truth
 ## Б07.3 — регрессия изоляции и утечек
 
 `tests/test_security_regression.py` проверяет agent-visible closed-траектории восьми сценариев на отсутствие truth/provenance/generation/error_plan/private/seed и нулевой видимый reward. Ошибочные запросы с путями, traversal, запрещённым выражением и secret-маркером дают только `invalid_query`, не отражая ввод. Локально прошли 143 теста. Контейнерный job через `scripts/verify_isolated_scenarios.py` успешно проверил duplicate, валютное interaction, clean distractors и 204 ledger rows, затем probe прав и сети; зелёный GitHub Actions для commit `ccc8482` подтверждён пользователем. R18 повторно подтверждено для расширенного worker.
+
+## Б08.1 — наборы эпизодов
+
+`benchmark/suites.py` стал единым сборщиком для supervisor и экспорта. В `episodes/` записаны 10 train и 10 dev с manifest/policy/ledger/invoices/payments/fx и отдельными truth/provenance/generation; `index.json` описывает конфигурацию и покрытие. Отдельные 20 internal holdout не экспортируются и имеют непересекающиеся seed/episode ID, ровно пять clean и пять interaction. Для 20 открытых конфигураций oracle-пары rename/shuffle сохраняют F1/reward. `tests/test_suites.py` проверяет размеры, покрытие четырёх типов, два interaction, масштаб ≥200 строк, byte-deterministic export, round-trip counts и побайтовое совпадение checked-in данных с текущим builder. Полная регрессия: 148 тестов.

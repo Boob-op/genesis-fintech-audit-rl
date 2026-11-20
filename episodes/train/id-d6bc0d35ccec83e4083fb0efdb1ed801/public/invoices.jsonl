@@ -1,0 +1,1 @@
+{"currency":"USD","doc_id":"id-2d65a8a1cf4ce48eb7c79e52bdd6c187","due_at":"2026-12-01T00:00:00+05:00","entity_id":"id-0dae98f58edaf5dd3241d386a2478654","invoice_id":"id-0e8f7121f9e70e47854cc2143988103c","issued_at":"2026-11-03T09:00:00+05:00","line_items":[{"amount_minor":10001,"description":"Synthetic service"}],"total_minor":10001}

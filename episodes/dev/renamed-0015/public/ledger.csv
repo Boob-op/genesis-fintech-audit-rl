@@ -1,0 +1,7 @@
+row_id,entry_id,timestamp,effective_at,account,debit_minor,credit_minor,currency,entity_id,invoice_id,payment_id,role,reporting_period_start,reporting_period_end,fx_date,fx_rate,allocated_source_minor
+renamed-0010,renamed-0004,2026-11-03T09:00:00+05:00,2026-11-03T09:00:00+05:00,receivables,100000,0,KZT,renamed-0001,renamed-0014,,invoice_recognition,2026-11-01T00:00:00+05:00,2026-12-01T00:00:00+05:00,,,
+renamed-0005,renamed-0004,2026-11-03T09:00:00+05:00,2026-11-03T09:00:00+05:00,revenue,0,100000,KZT,renamed-0001,renamed-0014,,invoice_recognition,2026-11-01T00:00:00+05:00,2026-12-01T00:00:00+05:00,,,
+renamed-0003,renamed-0007,2026-11-10T12:00:00+05:00,2026-11-10T12:00:00+05:00,bank,60000,0,KZT,renamed-0001,,renamed-0006,payment_receipt,2026-11-01T00:00:00+05:00,2026-12-01T00:00:00+05:00,,,
+renamed-0013,renamed-0007,2026-11-10T12:00:00+05:00,2026-11-10T12:00:00+05:00,unapplied_cash,0,60000,KZT,renamed-0001,,renamed-0006,payment_receipt,2026-11-01T00:00:00+05:00,2026-12-01T00:00:00+05:00,,,
+renamed-0008,renamed-0011,2026-11-10T12:00:00+05:00,2026-11-10T12:00:00+05:00,unapplied_cash,60000,0,KZT,renamed-0001,renamed-0014,renamed-0006,payment_allocation,2026-11-01T00:00:00+05:00,2026-12-01T00:00:00+05:00,,,
+renamed-0009,renamed-0011,2026-11-10T12:00:00+05:00,2026-11-10T12:00:00+05:00,receivables,0,60000,KZT,renamed-0001,renamed-0014,renamed-0006,payment_allocation,2026-11-01T00:00:00+05:00,2026-12-01T00:00:00+05:00,,,60000

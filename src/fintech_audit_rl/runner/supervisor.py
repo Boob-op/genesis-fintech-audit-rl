@@ -8,25 +8,9 @@ import threading
 import time
 from dataclasses import dataclass
 
-from fintech_audit_rl.benchmark.transforms import rename_ids, shuffle_ledger
+from fintech_audit_rl.benchmark.suites import EpisodeConfig, build_episode
 from fintech_audit_rl.env.core import AuditEnv
-from fintech_audit_rl.errors.allocation import short_allocate
-from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognition
-from fintech_audit_rl.errors.fx import wrong_receipt_fx
-from fintech_audit_rl.errors.period import wrong_invoice_period
 from fintech_audit_rl.evaluation.service import Evaluator, Score
-from fintech_audit_rl.generator.company import (
-    clean_distractor_company,
-    clean_usd_company,
-    scaled_clean_kzt_company,
-    seeded_clean_kzt,
-)
-from fintech_audit_rl.generator.truth import (
-    allocation_truth,
-    duplicate_truth,
-    fx_truth,
-    period_truth,
-)
 from fintech_audit_rl.runner.isolation import isolated_worker_command
 from fintech_audit_rl.storage.public_store import PublicStore
 
@@ -70,55 +54,26 @@ def run_first_episode(
         raise ValueError("unknown policy")
     if type(policy_seed) is not int:
         raise ValueError("policy seed must be integer")
-    if transform not in {"none", "rename", "shuffle"}:
-        raise ValueError("unknown transform")
     if not 0 <= timeout_seconds <= 60:
         raise ValueError("timeout outside developer contract")
     deadline = time.monotonic() + timeout_seconds
-    if fx_case and duplicate:
-        raise ValueError("FX case cannot contain duplicate invoice in v1")
-    if fx_error and not fx_case:
-        raise ValueError("FX mutation requires foreign case")
-    if distractors and (
-        fx_case or duplicate or allocation_actual_minor is not None or period_error
-    ):
-        raise ValueError("clean distractors cannot be combined with v1 mutations")
-    if scale_pairs is not None and (distractors or fx_case or period_error):
-        raise ValueError("scaled KZT case cannot use distractors, FX, or period mutation")
-    clean, _private_generation = (
-        scaled_clean_kzt_company(seed, scale_pairs)
-        if scale_pairs is not None
-        else clean_distractor_company(seed)
-        if distractors
-        else clean_usd_company(seed)
-        if fx_case
-        else seeded_clean_kzt(seed)
-    )
-    if transform == "rename":
-        clean = rename_ids(clean)
-    public = clean
-    issues = ()
-    if duplicate:
-        public, event = duplicate_invoice_recognition(clean, clean.invoices[0].invoice_id)
-        issues = (duplicate_truth(public, event),)
-    if allocation_actual_minor is not None:
-        public, event = short_allocate(
-            public,
-            public.payments[0].payment_id,
-            public.invoices[0].invoice_id,
-            allocation_actual_minor,
+    bundle = build_episode(
+        EpisodeConfig(
+            name="runtime",
+            split="runtime",
+            seed=seed,
+            duplicate=duplicate,
+            allocation_actual_minor=allocation_actual_minor,
+            fx_case=fx_case,
+            fx_error=fx_error,
+            period_error=period_error,
+            distractors=distractors,
+            scale_pairs=scale_pairs,
+            transform=transform,
         )
-        issues = (*issues, allocation_truth(public, event))
-    if fx_error:
-        public, event = wrong_receipt_fx(public, public.payments[0].payment_id, "2026-11-09")
-        issues = (*issues, fx_truth(public, event))
-    if period_error:
-        if fx_case or duplicate:
-            raise ValueError("period mutation is standalone in v1")
-        public, event = wrong_invoice_period(public, public.invoices[0].invoice_id)
-        issues = (*issues, period_truth(public, event))
-    if transform == "shuffle":
-        public = shuffle_ledger(public, seed)
+    )
+    public = bundle.public
+    issues = tuple(bundle.private.truth)
     store = PublicStore(public)
     evaluator = Evaluator(public.manifest.episode_id, issues, store.public_ids)
     env = AuditEnv(store, evaluator.score, evaluator.empty_score, closed=closed)

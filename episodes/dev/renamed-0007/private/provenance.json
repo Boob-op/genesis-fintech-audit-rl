@@ -1,0 +1,1 @@
+[{"event_id": "id-d253a1a919b70634c0d6cf11cd71fa0d", "mutation": "reduced instructed allocation", "public_ids": ["renamed-0001"], "type": "partial_allocation"}, {"event_id": "id-4a867d495d1fa7c0048cb054e25e9f4f", "mutation": "alternate receipt FX date and rate", "public_ids": ["renamed-0006", "renamed-0014"], "type": "fx_date_or_rate"}]
