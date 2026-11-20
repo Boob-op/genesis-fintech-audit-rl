@@ -49,6 +49,7 @@ def run_first_episode(
     period_error: bool = False,
     distractors: bool = False,
     scale_pairs: int | None = None,
+    timezone: str = "Asia/Qyzylorda",
 ) -> RunResult:
     if policy not in {"reconciliation", "flag_all", "random_explorer"}:
         raise ValueError("unknown policy")
@@ -70,6 +71,7 @@ def run_first_episode(
             distractors=distractors,
             scale_pairs=scale_pairs,
             transform=transform,
+            timezone=timezone,
         )
     )
     public = bundle.public

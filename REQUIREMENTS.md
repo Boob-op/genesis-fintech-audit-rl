@@ -177,4 +177,12 @@ Evaluator проверяет целостность доверенного truth
 
 ## Б08.2 — четыре адаптера
 
-`benchmark/runner.py` задаёт единый результат для reconciliation, flag-all, random explorer и oracle. Три обычных адаптера проходят через public JSON worker; oracle запускается у evaluator, явно помечен privileged и не получает искусственно сравнимую стоимость исследования. `reports/adapter_runs.json` содержит 80 запусков на одинаковых 20 train/dev: reconciliation и oracle получили 18 TP без FP/FN и F1=1 во всех эпизодах; flag-all — 196 FP, 18 FN и mean F1=0; random explorer — 18 FN и mean F1=0.30 за счёт шести clean эпизодов. Результаты воспроизводимы и связаны с config/episode ID; 152 теста прошли. Агрегирование времени/памяти и failure analysis остаются Б08.3.
+`benchmark/runner.py` задаёт единый результат для reconciliation, flag-all, random explorer и oracle. Три обычных адаптера проходят через public JSON worker; oracle запускается у evaluator, явно помечен privileged и не получает искусственно сравнимую стоимость исследования. `reports/adapter_runs.json` содержит 80 запусков на одинаковых 20 train/dev: reconciliation и oracle получили 18 TP без FP/FN и F1=1 во всех эпизодах; flag-all — 196 FP, 18 FN и mean F1=0; random explorer — 18 FN и mean F1=0.30 за счёт шести clean эпизодов. Результаты воспроизводимы и связаны с config/episode ID; измерения и анализ Б08.3 приведены ниже.
+
+## Б08.3 — траектории, измерения и сбои
+
+`reports/trajectories.jsonl` содержит 114 agent-visible шагов reconciliation для 20 открытых эпизодов с обязательными полями и без truth/provenance/generation/seed. `benchmark_summary.json` независимо агрегирует P/R/F1, reward, steps и wall-clock: reconciliation mean reward 0.9906 при mean 5.7 steps; flag-all 196 FP/18 FN; random explorer 18 FN и mean reward -0.4054; oracle privileged. Максимальный `peak_traced_bytes` около 2.33 МБ измеряет только Python allocations доверенного процесса, не RSS worker/container; это ограничение явно записано в `failure_analysis.md`, OS RSS относится к Б09. Арифметика summary и публичная форма траекторий проверены; вместе с timezone-проверками полная регрессия — 156 тестов.
+
+## Закрытие вариации часовой зоны Б06
+
+`change_timezone` согласованно переводит manifest, policy, invoice, payment и все ledger/reporting timestamps из Asia/Qyzylorda в UTC без изменения абсолютных моментов. `tests/test_timezone_variation.py` подтверждает чистую независимую финансовую проверку и одинаковые metrics/reward/steps worker; пять UTC-конфигураций входят во внутренний holdout. Это минимальная обязательная вариация зон, а не заявление о покрытии исторического DST. Вместе с Б08.3 полная регрессия содержит 156 тестов.

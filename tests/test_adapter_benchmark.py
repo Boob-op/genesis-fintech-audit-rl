@@ -42,11 +42,15 @@ def test_benchmark_order_and_json_are_deterministic(tmp_path):
             "tp",
             "fp",
             "fn",
+            "precision",
+            "recall",
             "f1",
             "reward",
             "steps",
             "worker_exit_code",
             "truncated",
+            "elapsed_seconds",
+            "peak_traced_bytes",
         }
         for item in raw
     )
@@ -68,3 +72,5 @@ def test_checked_in_benchmark_covers_every_open_config_and_adapter():
     assert all(item["f1"] == "1" for item in raw if item["adapter"] in {"reconciliation", "oracle"})
     assert all(not item["privileged"] for item in raw if item["adapter"] != "oracle")
     assert all(item["privileged"] for item in raw if item["adapter"] == "oracle")
+    assert all(item["elapsed_seconds"] > 0 for item in raw)
+    assert all(item["peak_traced_bytes"] > 0 for item in raw)

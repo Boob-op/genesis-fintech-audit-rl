@@ -32,6 +32,8 @@ def offset_time(value: datetime) -> datetime:
 
 
 def policy_timezone(name: str):
+    if name == "UTC":
+        return timezone.utc
     try:
         return ZoneInfo(name)
     except ZoneInfoNotFoundError:

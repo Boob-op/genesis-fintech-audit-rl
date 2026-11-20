@@ -4,7 +4,7 @@ import json
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
-from fintech_audit_rl.benchmark.transforms import rename_ids, shuffle_ledger
+from fintech_audit_rl.benchmark.transforms import change_timezone, rename_ids, shuffle_ledger
 from fintech_audit_rl.errors.allocation import short_allocate
 from fintech_audit_rl.errors.duplicate_invoice import duplicate_invoice_recognition
 from fintech_audit_rl.errors.fx import wrong_receipt_fx
@@ -40,6 +40,7 @@ class EpisodeConfig:
     distractors: bool = False
     scale_pairs: int | None = None
     transform: str = "none"
+    timezone: str = "Asia/Qyzylorda"
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,8 @@ def build_episode(config: EpisodeConfig) -> EpisodeBundle:
         if config.fx_case
         else seeded_clean_kzt(config.seed)
     )
+    if config.timezone != clean.policy.timezone:
+        clean = change_timezone(clean, config.timezone)
     if config.transform == "rename":
         clean = rename_ids(clean)
     public = clean
@@ -172,6 +175,7 @@ HOLDOUT = tuple(
         split="internal_holdout",
         seed=3000 + index,
         transform=("none", "rename", "shuffle")[index % 3],
+        timezone="UTC" if index % 4 == 0 else "Asia/Qyzylorda",
         **template,
     )
     for index, template in enumerate(HOLDOUT_TEMPLATES, 1)
@@ -233,6 +237,8 @@ def export_suite(configs: tuple[EpisodeConfig, ...], root: Path) -> list[dict]:
         bundle = build_episode(config)
         export_episode(bundle, root / config.split / bundle.public.manifest.episode_id)
         item = asdict(config)
+        if item["timezone"] == "Asia/Qyzylorda":
+            item.pop("timezone")
         item.update(
             {
                 "episode_id": bundle.public.manifest.episode_id,
