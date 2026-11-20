@@ -133,3 +133,14 @@ def test_checked_in_open_suite_matches_current_builder(tmp_path):
         (checked_in / relative).read_bytes() == (generated / relative).read_bytes()
         for relative in generated_files
     )
+
+
+def test_container_context_includes_open_suites_but_excludes_private_root():
+    root = Path(__file__).resolve().parents[1]
+    ignored = {
+        line.strip()
+        for line in (root / ".dockerignore").read_text("utf-8").splitlines()
+        if line.strip()
+    }
+    assert "episodes" not in ignored
+    assert "private" in ignored
