@@ -1,4 +1,4 @@
-"""Development entry point; no audit environment is implemented yet."""
+"""Command-line entry points for verification and demonstrations."""
 
 import argparse
 import json
@@ -13,7 +13,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="GENESIS FinTech development tools")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
-    verify = commands.add_parser("verify", help="Check the development foundation only")
+    verify = commands.add_parser("verify", help="Run repository verification")
     verify.add_argument("--full", action="store_true", help="Require full hackathon verification")
     demo = commands.add_parser("demo", help="Run the first KZT scenario in developer mode")
     demo.add_argument("--seed", type=int, default=101)
@@ -59,23 +59,27 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0 if result.worker_exit_code == 0 else 1
-    if args.full:
-        print("Full verification is unavailable: blocks B00–B09 are not complete.", flush=True)
-        return 2
     root = Path(__file__).resolve().parents[2]
     if not (root / "pyproject.toml").is_file() or not (root / "tests").is_dir():
         print("Run verify from an editable development installation with tests present.")
         return 2
-    print("Scope: development foundation only. Audit correctness is NOT verified.", flush=True)
+    print(
+        "Scope: full repository acceptance." if args.full else "Scope: repository checks.",
+        flush=True,
+    )
     checks = [
         [sys.executable, "scripts/sync_plan.py", "--check"],
+        *([[sys.executable, "scripts/check_submission.py"]] if args.full else []),
         [sys.executable, "-m", "ruff", "check", "."],
         [sys.executable, "-m", "ruff", "format", "--check", "."],
-        [sys.executable, "-m", "pytest"],
+        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider"],
     ]
     for command in checks:
         result = subprocess.run(command, cwd=root, check=False)
         if result.returncode:
             return result.returncode
-    print("Foundation checks passed; full hackathon acceptance remains pending.", flush=True)
+    if args.full:
+        print("Full repository verification passed.", flush=True)
+    else:
+        print("Repository checks passed; use verify --full for submission artifacts.", flush=True)
     return 0
