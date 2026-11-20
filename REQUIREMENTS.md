@@ -166,3 +166,7 @@ Evaluator проверяет целостность доверенного truth
 ## Б07.2 — replay и преобразования
 
 `tests/test_replay_transforms_full.py` повторяет с точным сравнением RunResult восемь поддерживаемых сценариев: четыре отдельных типа, два взаимодействия, чистые distractors и масштабированный эпизод. Для каждого rename/shuffle сохраняют metrics, reward и число шагов. Отдельная доверенная матрица проверяет oracle F1=1 и одинаковую награду для четырёх типов и двух взаимодействий; rename обновляет public IDs и `reverses_payment_id`. Полная локальная регрессия: 134 теста.
+
+## Частичная Б07.3 — регрессия изоляции и утечек
+
+`tests/test_security_regression.py` проверяет agent-visible closed-траектории восьми сценариев на отсутствие truth/provenance/generation/error_plan/private/seed и нулевой видимый reward. Ошибочные запросы с путями, traversal, запрещённым выражением и secret-маркером дают только `invalid_query`, не отражая ввод. Локально прошли 143 теста. Контейнерный job дополнен `scripts/verify_isolated_scenarios.py` для duplicate, валютного interaction, clean distractors и 204 ledger rows; R18 повторно не закрывать до успешного GitHub Actions.

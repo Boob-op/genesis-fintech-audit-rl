@@ -29,4 +29,5 @@ jobs:
       - run: docker build -t genesis-audit-dev .
       - run: docker run --rm --network none --cpus 2 --memory 4g genesis-audit-dev
       - run: uv run --no-sync python -m fintech_audit_rl demo --seed 101 --isolated --output runs/isolated/trajectories.jsonl
+      - run: uv run --no-sync python scripts/verify_isolated_scenarios.py
       - run: docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --pids-limit 64 --cpus 2 --memory 4g --user 65534:65534 --env PYTHONDONTWRITEBYTECODE=1 genesis-audit-dev python tests/security/probe_container.py
