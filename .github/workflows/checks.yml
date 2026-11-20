@@ -27,7 +27,7 @@ jobs:
       - run: uv sync --locked --dev --python 3.11
       - run: mkdir -p private && printf 'secret\n' > private/marker
       - run: docker build -t genesis-audit-dev .
-      - run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --cpus 2 --memory 4g --user 65534:65534 --env PYTHONDONTWRITEBYTECODE=1 genesis-audit-dev python -m fintech_audit_rl verify --full
+      - run: docker run --rm --network none --read-only --tmpfs /tmp:rw,noexec,nosuid,size=256m --cap-drop ALL --security-opt no-new-privileges --pids-limit 128 --cpus 2 --memory 4g --user 65534:65534 --env PYTHONDONTWRITEBYTECODE=1 --env RUFF_CACHE_DIR=/tmp/ruff-cache genesis-audit-dev python -m fintech_audit_rl verify --full
       - run: test "$(docker image inspect genesis-audit-dev --format '{{.Size}}')" -lt 1000000000
       - run: uv run --no-sync python -m fintech_audit_rl demo --seed 101 --isolated --output runs/isolated/trajectories.jsonl
       - run: uv run --no-sync python scripts/verify_isolated_scenarios.py

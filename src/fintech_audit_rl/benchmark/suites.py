@@ -202,32 +202,34 @@ def export_episode(bundle: EpisodeBundle, root: Path) -> None:
     public_dir.mkdir(parents=True, exist_ok=False)
     private_dir.mkdir(parents=True, exist_ok=False)
     public = bundle.public
-    (public_dir / "manifest.json").write_text(json_record(public.manifest) + "\n", "utf-8")
-    (public_dir / "policy.json").write_text(json_record(public.policy) + "\n", "utf-8")
-    (public_dir / "invoices.jsonl").write_text(jsonl_records(public.invoices), "utf-8")
-    (public_dir / "payments.jsonl").write_text(jsonl_records(public.payments), "utf-8")
-    (public_dir / "ledger.csv").write_text(csv_records(public.ledger, LedgerRow), "utf-8")
-    (public_dir / "fx.csv").write_text(
+
+    def write_lf(path: Path, content: str) -> None:
+        path.write_bytes(content.encode("utf-8"))
+
+    write_lf(public_dir / "manifest.json", json_record(public.manifest) + "\n")
+    write_lf(public_dir / "policy.json", json_record(public.policy) + "\n")
+    write_lf(public_dir / "invoices.jsonl", jsonl_records(public.invoices))
+    write_lf(public_dir / "payments.jsonl", jsonl_records(public.payments))
+    write_lf(public_dir / "ledger.csv", csv_records(public.ledger, LedgerRow))
+    write_lf(
+        public_dir / "fx.csv",
         csv_records(public.fx, FxRow)
         if public.fx
         else "date,source_currency,target_currency,rate\n",
-        "utf-8",
     )
-    (private_dir / "truth.json").write_text(
+    write_lf(
+        private_dir / "truth.json",
         json.dumps([item.model_dump(mode="json") for item in bundle.private.truth], sort_keys=True)
         + "\n",
-        "utf-8",
     )
-    (private_dir / "provenance.json").write_text(
+    write_lf(
+        private_dir / "provenance.json",
         json.dumps(
             [item.model_dump(mode="json") for item in bundle.private.provenance], sort_keys=True
         )
         + "\n",
-        "utf-8",
     )
-    (private_dir / "generation.json").write_text(
-        json_record(bundle.private.generation) + "\n", "utf-8"
-    )
+    write_lf(private_dir / "generation.json", json_record(bundle.private.generation) + "\n")
 
 
 def export_suite(configs: tuple[EpisodeConfig, ...], root: Path) -> list[dict]:
@@ -250,7 +252,7 @@ def export_suite(configs: tuple[EpisodeConfig, ...], root: Path) -> list[dict]:
             }
         )
         index.append(item)
-    (root / "index.json").write_text(
-        json.dumps(index, ensure_ascii=False, indent=2, sort_keys=True) + "\n", "utf-8"
+    (root / "index.json").write_bytes(
+        (json.dumps(index, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode("utf-8")
     )
     return index

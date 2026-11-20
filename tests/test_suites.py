@@ -129,8 +129,10 @@ def test_checked_in_open_suite_matches_current_builder(tmp_path):
         path.relative_to(checked_in) for path in checked_in.rglob("*") if path.is_file()
     )
     assert checked_files == generated_files
+    assert all(b"\r\n" not in (generated / relative).read_bytes() for relative in generated_files)
     assert all(
-        (checked_in / relative).read_bytes() == (generated / relative).read_bytes()
+        (checked_in / relative).read_bytes().replace(b"\r\n", b"\n")
+        == (generated / relative).read_bytes()
         for relative in generated_files
     )
 
