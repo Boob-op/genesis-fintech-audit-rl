@@ -5,4 +5,4 @@ WORKDIR /app
 COPY . .
 RUN uv sync --locked --dev
 ENV PATH="/app/.venv/bin:$PATH"
-CMD ["python", "-m", "fintech_audit_rl", "verify"]
+CMD ["python", "-m", "fintech_audit_rl", "verify", "--full"]

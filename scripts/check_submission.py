@@ -25,7 +25,16 @@ MAX_SOLUTION_BYTES = 1_000_000_000
 
 
 def checked_in_size() -> int:
-    excluded = {".git", ".venv", ".tools", ".uv-cache", ".pytest_cache", ".ruff_cache"}
+    excluded = {
+        ".git",
+        ".venv",
+        ".tools",
+        ".uv-cache",
+        ".pytest_cache",
+        ".ruff_cache",
+        "runs",
+        "tmp",
+    }
     return sum(
         path.stat().st_size
         for path in ROOT.rglob("*")
