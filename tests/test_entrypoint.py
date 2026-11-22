@@ -14,6 +14,16 @@ def test_submission_manifest_is_complete() -> None:
     assert result["bytes"] < 1_000_000_000
 
 
+def test_submission_size_excludes_local_run_artifacts(tmp_path, monkeypatch) -> None:
+    from scripts import check_submission
+
+    monkeypatch.setattr(check_submission, "ROOT", tmp_path)
+    (tmp_path / "README.md").write_bytes(b"code")
+    (tmp_path / "runs").mkdir()
+    (tmp_path / "runs" / "demo.bin").write_bytes(b"local output")
+    assert check_submission.checked_in_size() == 4
+
+
 def test_full_verification_command_is_wired(monkeypatch) -> None:
     from fintech_audit_rl import cli
 
