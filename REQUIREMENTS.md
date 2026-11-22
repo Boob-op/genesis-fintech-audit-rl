@@ -190,3 +190,7 @@ Evaluator проверяет целостность доверенного truth
 ## Б09 — локальная приёмка и комплект
 
 `verify --full` проверяет синхронизацию плана, обязательные файлы и counts, размер, Ruff и полную регрессию: локально прошли 158 тестов. Комплект содержит README, DESIGN, MIT LICENSE, фиксированные зависимости, 20 открытых эпизодов, 80 adapter runs, 114 trajectory steps и failure analysis; его локальный размер 3.1 МБ. `run_demo_suite.py` воспроизводит clean, duplicate, ложный flag-all, allocation+FX и одинаковый seed. После исправления LF и Ruff cache два GitHub Actions run commit `8bdcd73` завершились успешно; clean offline/read-only container с ресурсными ограничениями подтверждён. В `genesis.pdf` прямо сказано, что ссылку на форму или канал организаторы сообщат отдельно, поэтому фактическая отправка остаётся внешним организационным пунктом R46.
+
+## Необязательный observer UI
+
+Native Tkinter desktop и резервный localhost dashboard добавлены после обязательной приёмки и не заявляются требованием организаторов. Общий payload содержит public manifest/policy/documents/ledger, видимую trajectory и итоговые P/R/F1/reward/steps. `tests/test_dashboard.py` проверяет clean, duplicate, ложный flag-all, presenter-контракт и отсутствие private-ключей; вместе с ним полная регрессия — 162 теста. Tkinter запускается на Windows host, не внутри headless Docker; container verify не импортирует GUI-модуль.

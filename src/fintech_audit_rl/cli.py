@@ -27,7 +27,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     demo.add_argument("--policy-seed", type=int, default=0)
     demo.add_argument("--isolated", action="store_true")
+    dashboard = commands.add_parser("dashboard", help="Run the local audit dashboard")
+    dashboard.add_argument("--host", default="127.0.0.1")
+    dashboard.add_argument("--port", type=int, default=8765)
+    commands.add_parser("desktop", help="Run the native Windows audit observer")
     args = parser.parse_args(argv)
+    if args.command == "desktop":
+        from fintech_audit_rl.desktop import run_desktop
+
+        run_desktop()
+        return 0
+    if args.command == "dashboard":
+        from fintech_audit_rl.dashboard import serve_dashboard
+
+        serve_dashboard(args.host, args.port)
+        return 0
     if args.command == "demo":
         from fintech_audit_rl.reporting.trajectory import write_trajectory
         from fintech_audit_rl.runner.supervisor import run_first_episode

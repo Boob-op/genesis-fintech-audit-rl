@@ -19,7 +19,7 @@
 | М11 | `policies/base.py`, `policies/flag_all.py`, `policies/random_explorer.py`, `policies/reconciliation.py`; `evaluation/oracle.py` | Наблюдения → действия; oracle: truth → правильный submit | Три обычные политики и привилегированный oracle-адаптер | Прямое чтение эпизода обычными политиками | Б03A–Б05 |
 | М12 | `logging/trajectory.py`, `reporting/summary.py` | События запуска → JSONL и итоговый отчёт | Обязательные поля траекторий, метрики, разделение видимости | Подсказки агенту, подмена reward | Б03B–Б08 |
 | М13 | `benchmark/suites.py`, `benchmark/transforms.py`, `benchmark/replay.py` | Наборы/преобразования/действия → результаты проверок | Train/dev, внутренняя репетиция, смена ID, перестановки, replay | Имитация доступа к официальным скрытым seed | Минимум Б03B, расширение Б05–Б06, полный набор Б07–Б08 |
-| М14 | `cli.py`, `__main__.py`; корневые `Dockerfile`, `pyproject.toml` | CLI-конфигурация → запуск и exit code | Единая точка входа, verify/demo/generate/benchmark, упаковка | Собственные копии бизнес-логики | Б01–Б09 |
+| М14 | `cli.py`, `__main__.py`, `dashboard.py`, `desktop.py`; корневые `Dockerfile`, `pyproject.toml` | CLI/UI-конфигурация → запуск и exit code | Единая точка входа, verify/demo/dashboard/desktop, упаковка | Собственные копии бизнес-логики | Б01–Б09 + optional UI |
 
 ## 2. Поток данных
 
@@ -233,3 +233,7 @@ Worker не читает ни один файл runs. В closed-режиме р�
 ## Приёмка Б09
 
 М14 реализует `verify --full`, который без сети проверяет синхронизацию документации, полный комплект, counts/размер, Ruff и 158 тестов. `check_submission.py` требует README, DESIGN, LICENSE, schema, episodes и reports; `run_demo_suite.py` показывает пять обязательных наблюдаемых ситуаций. CI-конфигурация ограничивает подготовленный image read-only режимом, tmpfs, непривилегированным UID, отсутствием capabilities/сети, 2 CPU, 4 ГБ и размером <1 ГБ. После исправления LF и Ruff cache два CI run commit `8bdcd73` прошли; Б09.1–Б09.2 приняты, внешняя передача Б09.3 ждёт отдельно объявляемый канал.
+
+## Необязательный observer UI
+
+`dashboard.py` собирает один read-only presentation payload поверх существующих М10–М12. `desktop.py` отображает его в native Tkinter: выбор восьми сценариев и трёх worker policies, F1/reward/steps/TP-FP-FN, trajectory, public ledger/invoices/payments/manifest. `web/` использует тот же payload через localhost HTTP и остаётся резервом. Private bundle не сериализуется; четыре UI-теста и ручной Windows-прогон duplicate/reconciliation подтверждают F1=1, reward=0.990, 6 steps и TP/FP/FN=1/0/0.
