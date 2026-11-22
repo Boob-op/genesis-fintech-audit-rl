@@ -1,0 +1,1 @@
+{"allocation_rule":"immediate_invoice_refs","currency_exponents":{"JPY":0,"KZT":2,"USD":2},"doc_id":"id-ab4d6d46b16b38cb8a2962679cffeb71","fx_date_rule":"local_event_date","invoice_recognition":"issued_at","payment_recognition":"timestamp","period_end":"2026-12-01T00:00:00+05:00","period_start":"2026-11-01T00:00:00+05:00","rounding":"ROUND_HALF_EVEN","timezone":"Asia/Qyzylorda"}

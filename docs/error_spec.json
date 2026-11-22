@@ -1,0 +1,182 @@
+{
+  "spec_version": "1.0.0",
+  "status": "Project contract accepted for implementation in B02-B06; not an organizer schema or implemented financial engine",
+  "source": "genesis.pdf sections 2, 3, 5; DECISIONS.md Q01-Q07",
+  "common": {
+    "money": "All monetary fields are integer minor units, never bool or float. Issue amounts are nonnegative magnitudes, not signed corrections. A zero monetary FX difference may still be a date/rate violation.",
+    "currency_exponents": {"KZT": 2, "USD": 2, "JPY": 0},
+    "conversion": "base_minor = round_half_even(Decimal(source_minor) * Decimal(rate) * 10**target_exponent / 10**source_exponent). rate is target major units per source major unit. Round once per business event, then copy the result to both journal legs; never round the legs separately or sum unrounded events. Same currency rate is 1. No inverse, interpolation or missing-date fallback.",
+    "rounding": "ROUND_HALF_EVEN",
+    "tolerance_minor": 0,
+    "period": "Policy declares timezone, period_start and period_end as offset timestamps. Compare instants using [start,end). Use local calendar date in policy timezone for FX. Include adjacent-period records needed to prove an event assigned outside the target period. No naive timestamps.",
+    "ledger_model": "Synthetic receivables model: invoice recognition Dr receivables / Cr revenue; receipt Dr bank / Cr unapplied_cash; allocation Dr unapplied_cash / Cr receivables. Each entry_id groups two rows, same currency and amount, one positive debit and one positive credit. Ledger is in base currency; foreign documents preserve source minor units. No cross-currency debit-credit balancing. Every row retains all PDF fields; null for absent invoice_id/payment_id. Refund/reversal links and zero-sum reversals must be explicit before B06 distractors are generated.",
+    "public_extensions": {
+      "ledger": "entry_id, role (invoice_recognition/payment_receipt/payment_allocation), effective_at (document-derived recognition instant), reporting_period_start, reporting_period_end, fx_date, fx_rate; allocation receivables credit row additionally allocated_source_minor. Companion debit has allocated_source_minor=null to avoid double counting. Both legs carry invoice_id/payment_id where applicable. effective_at and FX expectation must be independently reconstructible from documents, not trusted from ledger.",
+      "invoice_refs": "List of objects {invoice_id, amount_minor}; amount_minor is the intended allocation in PAYMENT currency. Unique invoice_id per payment, positive integer amounts, sum <= payment.amount_minor. Invoice and payment currency/entity must agree in v1; foreign means relative to base currency. Empty list is an authorized unapplied advance. Residual is allowed unapplied cash. Several payments may target one invoice. Intended allocations cannot exceed its genuine outstanding amount; duplicates never increase that entitlement.",
+      "fx": "Keep PDF columns date/source_currency/target_currency/rate. Unique (date,source_currency,target_currency); expose a public opaque record ID through the store index, without adding a required CSV column.",
+      "policy": "Public document has an opaque ID advertised in manifest. Declares currency exponents, ROUND_HALF_EVEN, timezone, period bounds, invoice recognition at issued_at, receipt/allocation at payment.timestamp, FX date from that local event date, and immediate allocation exactly as invoice_refs. Synthetic policy, not a claim about real accounting law."
+    },
+    "foreign_settlement": "In v1 all events settling a foreign invoice use the same reference rate, except an intentionally mutated receipt valuation. This avoids unmodelled realized FX gains/losses. Different-date rates may exist as incorrect alternatives. Relax only after an explicit realized-FX contract. Allocation valuation uses its own correct policy rate; it must not inherit a mutated receipt valuation.",
+    "ids": "Globally unique public opaque row/doc/FX/policy IDs; no type, seed, mutation or truth encoded. Business invoice_id/payment_id are links, not evidence IDs. Namespace is provided by public index metadata, not ID spelling. Canonical affected_ids is the exact set defined below: compare without order, collapse repeats only after raw limits. Never discard extra unique IDs. Repeated findings remain separate FP candidates. Rename all references consistently.",
+    "evidence": "Each evidence_sets entry is a complete required set; at least one must be a subset of submitted evidence_ids, within the raw limit of 10. Extra resolvable public IDs are allowed, unknown IDs cannot support a match (structural classification in B00.3). No requirement to have opened an ID beforehand. Evidence IDs resolve through get_record(table,id) or get_document(doc_id). policy and FX are publicly discoverable. Absence is proved by exhausting list_records(ledger,cursor,limit) to terminal cursor, not by a fictitious missing-row ID or a private certificate. Only public-store completeness is trusted.",
+    "scope": "Exactly the four types below. Unsupported mutations/compensating combinations must be rejected by generation preconditions, not silently omitted from truth. Structural data failures are generator validation failures, not new scored types. After mutation preserve journal balance but allow the specified document/ledger mismatch. Independent validator uses public data, not provenance or mutation calculation functions.",
+    "example_convention": "Example IDs are readable placeholders, renamed opaquely in episodes. Examples below are compact financial fixtures, not full export schemas. entry_rows lists both journal legs; allocation_rows lists receivables credit legs only. Every referenced ID is declared in public_ids; document fields and entry semantics are supplied by this contract."
+  },
+  "errors": [
+    {
+      "type": "duplicate_invoice",
+      "version": "1.0.0",
+      "definition": "The same genuine invoice is recognized more than once in receivables/revenue. A second payment or equal amount on a different invoice is not a duplicate invoice.",
+      "correct_scenario": "One genuine invoice document and exactly one balanced recognition entry.",
+      "preconditions": "Exactly one original recognition, no reversal/credit note, no other mutation on its valuation or period. First version allows exactly one added complete recognition entry.",
+      "mutation": "Copy both invoice-recognition legs with new row_id/entry_id, retaining invoice_id, entity and value. Do not create a new genuine invoice or duplicate payment.",
+      "amount_semantics": "sum of recognized receivables debits for the genuine invoice minus its single correctly converted total; positive excess. Count one leg per entry, not both. One issue for the whole duplicate group.",
+      "currency_rule": "base_currency",
+      "affected_ids_rule": "All ledger row_ids of both recognition entries, including original and repeated legs. Never choose the 'extra' entry by ID/order.",
+      "evidence_sets": [["invoice_doc", "all_recognition_rows", "policy_doc", "reference_fx_if_foreign"]],
+      "evidence_access": "Find invoice doc and all ledger rows with its invoice_id by complete public pagination; resolve policy and reference FX. KZT example requires 6 IDs, foreign variant 7.",
+      "tolerance_minor": 0,
+      "compatibility": "Only allocation on same invoice in interaction duplicate_with_allocation; payment entitlement remains based on genuine invoice.",
+      "example": {
+        "public_ids": ["i1", "r1", "r2", "r3", "r4", "pol"],
+        "invoice_minor": 100000, "currency": "KZT", "recognized_debits_minor": [100000, 100000],
+        "entry_rows": [["r1", "r2"], ["r3", "r4"]],
+        "manual_calculation": "100000 + 100000 - 100000 = 100000 KZT minor; not 200000 from summing both sides",
+        "expected_amount_minor": 100000,
+        "affected_ids": ["r1", "r2", "r3", "r4"],
+        "evidence_ids": ["i1", "r1", "r2", "r3", "r4", "pol"]
+      },
+      "clean_analogue": "Two genuine invoices, different invoice_id and documented business events, each 100000 KZT minor with one recognition entry: no issue. Two payments of 50000 against one 100000 invoice also clean."
+    },
+    {
+      "type": "partial_allocation",
+      "version": "1.0.0",
+      "definition": "Recorded allocation to a specifically instructed invoice is less than the amount required by payment.invoice_refs under the public immediate-allocation policy; includes no allocation at all.",
+      "correct_scenario": "Payment receipt is recorded; each intended invoice_ref is allocated in full. Partial payment of an invoice is legal.",
+      "preconditions": "Positive instruction, same payment/invoice currency and entity, valid receipt, no refund/reversal; v1 at most one allocation entry per payment/invoice pair. No over-allocation or misdirection mutation in v1.",
+      "mutation": "Reduce both legs of the allocation entry and allocated_source_minor consistently; remove both legs if zero. Leave receipt and intended invoice_refs unchanged. Residual stays in unapplied_cash.",
+      "amount_semantics": "For each (payment_id,invoice_id), intended source minor units minus sum allocated_source_minor on receivables credit rows for that pair. One issue per deficient pair; not the invoice unpaid balance and not the full receipt.",
+      "currency_rule": "Payment currency (also invoice currency in v1), NOT base valuation currency",
+      "affected_ids_rule": "Exactly payment doc_id and target invoice doc_id, even when no allocation row exists.",
+      "evidence_sets": [["payment_doc", "invoice_doc", "policy_doc", "all_existing_allocation_credit_rows_for_pair"]],
+      "evidence_access": "Payment document declares exact instruction. Exhaust ledger pages and inspect every matching pair, including zero matches. Receipt validity is a generation precondition independently checked on public data. Existing credit rows are evidence, absent rows are never invented. Example needs 4 IDs; complete omission needs 3.",
+      "tolerance_minor": 0,
+      "compatibility": "Can share a payment with receipt FX mutation or an invoice with duplicate recognition; compute source-unit shortage independently of those distortions.",
+      "example": {
+        "public_ids": ["p1", "i1", "a2", "pol"],
+        "invoice_minor": 100000, "payment_minor": 60000, "intended_minor": 60000,
+        "invoice_refs": [{"invoice_id": "inv1", "amount_minor": 60000}],
+        "allocated_minor": [40000], "allocation_rows": ["a2"], "currency": "KZT",
+        "manual_calculation": "60000 - 40000 = 20000 KZT minor; remaining invoice debt 60000 is not the error",
+        "expected_amount_minor": 20000, "affected_ids": ["p1", "i1"],
+        "evidence_ids": ["p1", "i1", "a2", "pol"]
+      },
+      "omission_example": {"intended_minor": 60000, "allocated_minor": [], "expected_amount_minor": 60000, "evidence_ids": ["p1", "i1", "pol"]},
+      "clean_analogue": "Invoice 100000, payment/instruction/allocation 60000 leaves legitimate debt 40000. Payment 70000 with instruction/allocation 60000 leaves authorized advance 10000. Empty invoice_refs with no allocation is clean.",
+      "split_payment_example": {"invoice_minor": 100000, "payments_minor": [40000, 60000], "instructions_minor": [40000, 60000], "allocations_minor": [40000, 60000], "expected_issues": 0}
+    },
+    {
+      "type": "fx_date_or_rate",
+      "version": "1.0.0",
+      "definition": "A foreign payment receipt uses an FX date or rate different from the publicly prescribed date/rate, or its rounded base valuation differs from the prescribed conversion. One issue per receipt, even if both date and rate are wrong.",
+      "correct_scenario": "Convert receipt at reference FX on local payment date, round once, use result on bank debit and unapplied_cash credit.",
+      "preconditions": "Foreign source currency, positive amount, reference and any selected alternate FX available; one receipt entry. No realized FX gains/losses required by the underlying clean history.",
+      "mutation": "Replace receipt fx_date and/or fx_rate and recompute both receipt legs consistently with the selected decimal rate. Keep payment amount/date, reference table and allocations unchanged.",
+      "amount_semantics": "abs(recorded bank debit in base minor - correctly rounded conversion of full payment amount). If wrong date/rate rounds to the same amount, issue remains with amount 0 and requires public wrong date/rate evidence; do not drop it. No additional allocation issue for valuation alone.",
+      "currency_rule": "base_currency",
+      "affected_ids_rule": "Both receipt ledger row_ids; no allocation rows.",
+      "evidence_sets": [["payment_doc", "both_receipt_rows", "policy_doc", "correct_reference_fx_row"]],
+      "evidence_access": "Payment via get_document; receipt via ledger; correct FX via get_record(fx,id) after list_records(fx); policy via get_document. Wrong selected date/rate is carried on both public receipt rows. 5 IDs.",
+      "tolerance_minor": 0,
+      "compatibility": "Only allocation shortage on same payment in foreign_allocation_with_fx. Invoice-recognition FX mutations and cross-currency settlement are not generated in v1.",
+      "example": {
+        "public_ids": ["p1", "b1", "b2", "f1", "pol"],
+        "source_minor": 10001, "source_currency": "USD", "source_exponent": 2,
+        "target_currency": "KZT", "target_exponent": 2,
+        "correct_rate": "500.25", "recorded_rate": "501.25",
+        "correct_date": "2026-11-18", "recorded_date": "2026-11-17",
+        "correct_base_minor": 5003000, "recorded_base_minor": 5013001,
+        "manual_calculation": "10001 * 500.25 = 5003000.25 -> 5003000; 10001 * 501.25 = 5013001.25 -> 5013001; abs difference = 10001",
+        "expected_amount_minor": 10001, "currency": "KZT", "affected_ids": ["b1", "b2"],
+        "evidence_ids": ["p1", "b1", "b2", "f1", "pol"]
+      },
+      "rounding_examples": [
+        {"source_minor": 1, "source_exponent": 2, "target_exponent": 2, "rate": "2.5", "expected_base_minor": 2},
+        {"source_minor": 3, "source_exponent": 2, "target_exponent": 2, "rate": "2.5", "expected_base_minor": 8},
+        {"source_minor": 101, "source_exponent": 0, "target_exponent": 2, "rate": "3.25", "expected_base_minor": 32825},
+        {"source_minor": 101, "source_exponent": 2, "target_exponent": 0, "rate": "150", "expected_base_minor": 152}
+      ],
+      "zero_difference_example": "1 USD minor at 500.25 vs 500.26 KZT/USD both rounds to 500 KZT minor; wrong rate still constitutes one FX issue of amount 0. Wrong date with unchanged rate likewise remains a date issue.",
+      "clean_analogue": "Receipt using 500.25 on required date with 5003000 KZT minor is clean, despite another date offering 501.25; do not choose rate by apparent similarity."
+    },
+    {
+      "type": "period_cutoff",
+      "version": "1.0.0",
+      "definition": "An invoice recognition entry is assigned to the target reporting period although its document-derived effective instant is outside it, or excluded although that instant is inside it.",
+      "correct_scenario": "Both invoice-recognition legs are assigned to the period containing invoice.issued_at under public policy.",
+      "preconditions": "Single genuine invoice and recognition entry, correct valuation, public issued_at, adjacent-period records retained; no duplicate or FX mutation on this entry.",
+      "mutation": "Change reporting_period_start/end on both recognition rows to the adjacent period without changing issued_at, effective_at, amounts or timestamps. Period attribution is explicit; timestamp alone is not silently reinterpreted.",
+      "amount_semantics": "Correctly valued single recognition amount in base minor units whose inclusion in the target period is wrong. Count one leg once. One issue per entry, not one for each of the two periods.",
+      "currency_rule": "base_currency",
+      "affected_ids_rule": "Both invoice-recognition ledger row_ids.",
+      "evidence_sets": [["invoice_doc", "both_recognition_rows", "policy_doc", "reference_fx_if_foreign"]],
+      "evidence_access": "Invoice provides issued_at; policy provides recognition rule and interval; both ledger rows provide actual reporting period. Adjacent rows must remain discoverable by list_records. 4 IDs domestic, 5 foreign.",
+      "tolerance_minor": 0,
+      "compatibility": "Standalone only in v1; the first required interaction uses FX, not cutoff. Other combinations require new documented preconditions.",
+      "example": {
+        "public_ids": ["i1", "r1", "r2", "pol"],
+        "timezone": "Asia/Qyzylorda", "period_start": "2026-11-01T00:00:00+05:00", "period_end": "2026-12-01T00:00:00+05:00",
+        "issued_at": "2026-12-01T00:00:00+05:00", "recorded_in_target": true, "expected_in_target": false,
+        "base_minor": 75000, "currency": "KZT", "expected_amount_minor": 75000,
+        "manual_calculation": "issued_at == exclusive end; correct inclusion 0, recorded inclusion 1; abs(1-0) * 75000 = 75000",
+        "affected_ids": ["r1", "r2"], "evidence_ids": ["i1", "r1", "r2", "pol"]
+      },
+      "boundary_examples": [
+        {"instant": "2026-10-31T23:59:59+05:00", "inside": false},
+        {"instant": "2026-11-01T00:00:00+05:00", "inside": true},
+        {"instant": "2026-11-30T23:59:59+05:00", "inside": true},
+        {"instant": "2026-12-01T00:00:00+05:00", "inside": false},
+        {"instant": "2026-12-01T00:00:01+05:00", "inside": false},
+        {"instant": "2026-11-30T19:00:00+00:00", "inside": false}
+      ],
+      "clean_analogue": "An invoice issued exactly at end and assigned to December is clean; a November invoice paid in December stays November revenue. Invoice issued inside but assigned outside produces the same magnitude as wrongful inclusion."
+    }
+  ],
+  "interactions": [
+    {
+      "id": "foreign_allocation_with_fx",
+      "status": "Design only; executable mutation and independent acceptance in B06",
+      "types": ["partial_allocation", "fx_date_or_rate"],
+      "preconditions": "USD invoice 20000 minor, USD payment/instruction 10001 minor, correct allocation 10001. Base KZT, reference 500.25; invoice and allocation valuations use same reference rate. One receipt and one allocation entry.",
+      "mutation_order": ["Reduce allocated source amount to 6000 and correctly value both allocation legs", "Change receipt FX to 501.25 and revalue both receipt legs only"],
+      "manual_calculation": "Allocation shortage 10001-6000=4001 USD minor. Correct receipt 5003000; actual receipt 5013001; FX issue 10001 KZT minor. Allocation base value 6000*500.25=3001500, actual unapplied base balance 5013001-3001500=2011501. This balance includes both effects and is NOT a third issue.",
+      "expected_issues": [
+        {"type": "partial_allocation", "expected_amount_minor": 4001, "currency": "USD", "affected_ids": ["p1", "i1"], "evidence_ids": ["p1", "i1", "a2", "pol"]},
+        {"type": "fx_date_or_rate", "expected_amount_minor": 10001, "currency": "KZT", "affected_ids": ["b1", "b2"], "evidence_ids": ["p1", "b1", "b2", "f1", "pol"]}
+      ],
+      "public_ids": ["p1", "i1", "a1", "a2", "b1", "b2", "f1", "pol"],
+      "independent_evidence": "Allocation read in USD source units from instruction and actual allocation credit; receipt valuation reconstructed separately from payment and reference FX. No private mutation order needed.",
+      "no_double_counting": "Exactly two independent rule violations with different affected sets/currencies; never sum amounts across currencies or create shortage from receipt valuation residual.",
+      "masking_rule": "Do not mutate invoice_refs, reference FX or allocation rate. Reject any change that removes public evidence or repairs either violation. Repairing either mutation leaves exactly the other issue; repairing both is clean.",
+      "clean_analogue": "Same partial invoice payment with full instructed allocation and correct receipt FX: no issue."
+    },
+    {
+      "id": "duplicate_with_allocation",
+      "status": "Design only; executable mutation and independent acceptance in B06",
+      "types": ["duplicate_invoice", "partial_allocation"],
+      "preconditions": "One genuine KZT invoice 100000 minor, payment/instruction 60000, full allocation 60000; no second genuine invoice.",
+      "mutation_order": ["Duplicate complete recognition entry", "Reduce allocation from 60000 to 40000, preserving receipt and instruction"],
+      "manual_calculation": "Recognition 200000-100000=100000 KZT minor duplicate; instruction 60000-40000=20000 KZT minor shortage. Apparent receivable 200000-40000=160000 versus clean 100000-60000=40000 differs by 120000; do not add that derived balance as a third issue.",
+      "expected_issues": [
+        {"type": "duplicate_invoice", "expected_amount_minor": 100000, "currency": "KZT", "affected_ids": ["r1", "r2", "r3", "r4"], "evidence_ids": ["i1", "r1", "r2", "r3", "r4", "pol"]},
+        {"type": "partial_allocation", "expected_amount_minor": 20000, "currency": "KZT", "affected_ids": ["p1", "i1"], "evidence_ids": ["p1", "i1", "a2", "pol"]}
+      ],
+      "public_ids": ["i1", "p1", "r1", "r2", "r3", "r4", "a1", "a2", "pol"],
+      "independent_evidence": "Recognition group reconstructed by invoice_id; payment instruction and actual allocation reconstructed by payment_id/invoice_id. Both use unchanged genuine invoice.",
+      "no_double_counting": "Two distinct mutations, two issues. Do not classify unpaid duplicate balance as additional allocation error. Canonical duplicate set includes both entries regardless of insertion order.",
+      "masking_rule": "Do not copy invoice_refs or allocate against the duplicate as a new obligation. Each mutation alone yields its one issue; both repaired yields clean data.",
+      "clean_analogue": "One recognition plus correctly allocated 60000 partial payment: legitimate outstanding 40000, zero issues."
+    }
+  ],
+  "acceptance_followup": "B00.2 checks document shape, exact manual arithmetic, boundary examples and declared evidence references only. B02 implements strict schemas/spec loader and complete public fixtures; B03A/B05 implement independent reconstruction; B06 proves interactions, repair cases, rename/shuffle and evidence reachability within 100 actions. No runtime or isolation claim follows from this document."
+}

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GENESIS Audit Console</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">G</span><div><b>GENESIS</b><small>FINTECH AUDIT CONSOLE</small></div></div>
+      <div class="system-status"><span class="status-dot"></span>LOCAL · TRUSTED VIEW</div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div>
+          <p class="eyebrow">Наблюдение за audit-agent</p>
+          <h1>Финансовое расследование<br><em>по шагам</em></h1>
+          <p class="lede">Выберите сценарий и политику. Dashboard покажет только публичные данные worker, действия и итог evaluator.</p>
+        </div>
+        <div class="control-panel">
+          <label>Сценарий<select id="scenario">
+            <option value="duplicate">Дубль счёта</option><option value="clean">Чистая компания</option>
+            <option value="allocation">Частичное распределение</option><option value="fx">Ошибка FX</option>
+            <option value="period">Ошибка периода</option><option value="allocation_fx">Allocation + FX</option>
+            <option value="duplicate_allocation">Duplicate + allocation</option><option value="distractors">Чистые distractors</option>
+          </select></label>
+          <label>Политика<select id="policy"><option value="reconciliation">Reconciliation</option><option value="flag_all">Flag all</option><option value="random_explorer">Random explorer</option></select></label>
+          <label>Seed<input id="seed" type="number" min="0" max="2147483647" value="101"></label>
+          <button id="run">Запустить расследование</button>
+        </div>
+      </section>
+
+      <section id="empty" class="empty-state"><div class="pulse"></div><h2>Готово к запуску</h2><p>Результаты появятся здесь после выполнения worker.</p></section>
+      <section id="loading" class="loading hidden"><div class="spinner"></div><p>Worker исследует публичную историю…</p></section>
+
+      <div id="results" class="hidden">
+        <section class="metrics" aria-label="Итоговые метрики">
+          <article><span>F1</span><strong id="m-f1">—</strong><small>качество ответа</small></article>
+          <article><span>REWARD</span><strong id="m-reward">—</strong><small>итоговая награда</small></article>
+          <article><span>STEPS</span><strong id="m-steps">—</strong><small>из лимита 100</small></article>
+          <article><span>TP / FP / FN</span><strong id="m-counts">—</strong><small>результат matcher</small></article>
+        </section>
+
+        <section class="workspace">
+          <article class="panel timeline-panel">
+            <header><div><p class="eyebrow">Worker trace</p><h2>Ход расследования</h2></div><span id="episode-badge" class="badge"></span></header>
+            <div id="timeline" class="timeline"></div>
+          </article>
+          <article class="panel inspector-panel">
+            <header><div><p class="eyebrow">Step inspector</p><h2 id="step-title">Выберите шаг</h2></div><span id="step-state" class="badge muted">PUBLIC</span></header>
+            <div id="step-content" class="code-card">Нажмите на действие слева.</div>
+          </article>
+        </section>
+
+        <section class="panel data-panel">
+          <header><div><p class="eyebrow">Public evidence</p><h2>Финансовая история</h2></div><nav class="tabs"><button data-tab="ledger" class="active">Проводки</button><button data-tab="invoices">Счета</button><button data-tab="payments">Платежи</button><button data-tab="manifest">Manifest</button></nav></header>
+          <div id="data-view" class="table-wrap"></div>
+        </section>
+      </div>
+    </main>
+    <footer><span>GENESIS FINTECH · LOCAL DASHBOARD</span><span>Truth и provenance не передаются worker</span></footer>
+    <script src="/app.js"></script>
+  </body>
+</html>

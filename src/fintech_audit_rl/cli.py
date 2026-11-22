@@ -1,6 +1,7 @@
-"""Development entry point; no audit environment is implemented yet."""
+"""Command-line entry points for verification and demonstrations."""
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -12,26 +13,87 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="GENESIS FinTech development tools")
     parser.add_argument("--version", action="version", version=__version__)
     commands = parser.add_subparsers(dest="command", required=True)
-    verify = commands.add_parser("verify", help="Check the development foundation only")
+    verify = commands.add_parser("verify", help="Run repository verification")
     verify.add_argument("--full", action="store_true", help="Require full hackathon verification")
+    demo = commands.add_parser("demo", help="Run the first KZT scenario in developer mode")
+    demo.add_argument("--seed", type=int, default=101)
+    demo.add_argument("--output", type=Path, default=Path("runs/demo/trajectories.jsonl"))
+    demo.add_argument("--clean", action="store_true")
+    demo.add_argument("--closed", action="store_true")
+    demo.add_argument(
+        "--policy",
+        choices=["reconciliation", "flag_all", "random_explorer"],
+        default="reconciliation",
+    )
+    demo.add_argument("--policy-seed", type=int, default=0)
+    demo.add_argument("--isolated", action="store_true")
+    dashboard = commands.add_parser("dashboard", help="Run the local audit dashboard")
+    dashboard.add_argument("--host", default="127.0.0.1")
+    dashboard.add_argument("--port", type=int, default=8765)
+    commands.add_parser("desktop", help="Run the native Windows audit observer")
     args = parser.parse_args(argv)
-    if args.full:
-        print("Full verification is unavailable: blocks B00–B09 are not complete.", flush=True)
-        return 2
+    if args.command == "desktop":
+        from fintech_audit_rl.desktop import run_desktop
+
+        run_desktop()
+        return 0
+    if args.command == "dashboard":
+        from fintech_audit_rl.dashboard import serve_dashboard
+
+        serve_dashboard(args.host, args.port)
+        return 0
+    if args.command == "demo":
+        from fintech_audit_rl.reporting.trajectory import write_trajectory
+        from fintech_audit_rl.runner.supervisor import run_first_episode
+
+        result = run_first_episode(
+            args.seed,
+            duplicate=not args.clean,
+            closed=args.closed,
+            policy=args.policy,
+            policy_seed=args.policy_seed,
+            isolated=args.isolated,
+        )
+        write_trajectory(args.output, result.trajectory)
+        print(
+            json.dumps(
+                {
+                    "mode": (
+                        "container_isolated"
+                        if args.isolated
+                        else "developer_subprocess_not_os_isolated"
+                    ),
+                    "steps": result.steps,
+                    "f1": str(result.score.metrics.f1) if result.score.metrics else None,
+                    "scored_reward": str(result.score.reward),
+                    "worker_exit_code": result.worker_exit_code,
+                    "trajectory": str(args.output),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0 if result.worker_exit_code == 0 else 1
     root = Path(__file__).resolve().parents[2]
     if not (root / "pyproject.toml").is_file() or not (root / "tests").is_dir():
         print("Run verify from an editable development installation with tests present.")
         return 2
-    print("Scope: development foundation only. Audit correctness is NOT verified.", flush=True)
+    print(
+        "Scope: full repository acceptance." if args.full else "Scope: repository checks.",
+        flush=True,
+    )
     checks = [
         [sys.executable, "scripts/sync_plan.py", "--check"],
+        *([[sys.executable, "scripts/check_submission.py"]] if args.full else []),
         [sys.executable, "-m", "ruff", "check", "."],
         [sys.executable, "-m", "ruff", "format", "--check", "."],
-        [sys.executable, "-m", "pytest"],
+        [sys.executable, "-m", "pytest", "-p", "no:cacheprovider"],
     ]
     for command in checks:
         result = subprocess.run(command, cwd=root, check=False)
         if result.returncode:
             return result.returncode
-    print("Foundation checks passed; full hackathon acceptance remains pending.", flush=True)
+    if args.full:
+        print("Full repository verification passed.", flush=True)
+    else:
+        print("Repository checks passed; use verify --full for submission artifacts.", flush=True)
     return 0
